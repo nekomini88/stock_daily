@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env
+
+# Reports (optional - keep only source)
+# *.html
+# *.txt
+# *.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# 隐私/发送链路
+config.ini
+# 生成产物
+files/
+
+# 敏感产物/缓存
+__pycache__/
+
+__pycache__/
+*.pyc
+cron.log
+files/
