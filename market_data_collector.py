@@ -149,7 +149,7 @@ def main():
     output["macro"] = fetch_macro()
 
     # Save
-    output_dir = Path("/root/us_stock_daily/daily_news")
+    output_dir = Path("/root/stock_daily/daily_news")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"market_data_{date_str}.json"
     output_file.write_text(json.dumps(output, indent=2, ensure_ascii=False))

@@ -1,6 +1,6 @@
 {
-  "date": "2026-07-04",
-  "timestamp": "2026-07-04T21:24:36.390828",
+  "date": "2026-07-05",
+  "timestamp": "2026-07-05T08:29:00.666103",
   "indices": {
     "S&P 500": {
       "symbol": "SPY",
@@ -146,8 +146,8 @@
     "10Y收益率": {
       "symbol": "^TNX",
       "price": 4.4849997,
-      "prev_close": 4.372,
-      "change_pct": 2.58,
+      "prev_close": 4.4849997,
+      "change_pct": 0.0,
       "high": 0.0,
       "low": 0.0,
       "volume": 0
@@ -164,8 +164,8 @@
     "13T国债": {
       "symbol": "^IRX",
       "price": 3.668,
-      "prev_close": 3.663,
-      "change_pct": 0.14,
+      "prev_close": 3.668,
+      "change_pct": 0.0,
       "high": 0.0,
       "low": 0.0,
       "volume": 0
@@ -173,8 +173,8 @@
     "5Y Treasury": {
       "symbol": "^FVX",
       "price": 4.23,
-      "prev_close": 4.13,
-      "change_pct": 2.42,
+      "prev_close": 4.23,
+      "change_pct": 0.0,
       "high": 0.0,
       "low": 0.0,
       "volume": 0
@@ -208,21 +208,21 @@
     },
     "比特币": {
       "symbol": "BTC-USD",
-      "price": 62621.6,
-      "prev_close": 58558.86,
-      "change_pct": 6.94,
-      "high": 62856.25,
-      "low": 62292.277,
-      "volume": 20990369792
+      "price": 62985.54,
+      "prev_close": 60003.758,
+      "change_pct": 4.97,
+      "high": 63087.742,
+      "low": 62976.688,
+      "volume": 17509873664
     },
     "以太坊": {
       "symbol": "ETH-USD",
-      "price": 1767.8,
-      "prev_close": 1569.5839,
-      "change_pct": 12.63,
-      "high": 1768.5936,
-      "low": 1743.8412,
-      "volume": 7344605696
+      "price": 1773.6,
+      "prev_close": 1608.961,
+      "change_pct": 10.23,
+      "high": 1779.066,
+      "low": 1774.17,
+      "volume": 7935826432
     }
   }
 }

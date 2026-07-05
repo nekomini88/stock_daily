@@ -104,15 +104,23 @@
         }
 
         th {
-            background: rgba(247, 243, 233, 0.9);
+            background: rgba(247, 243, 233, 0.95);
             color: #1a1a1a;
             font-weight: 800;
             border-bottom: 2px solid rgba(0, 0, 0, 0.08);
             border-radius: 0;
         }
 
-        tr:nth-child(even) {
-            background: rgba(0, 0, 0, 0.015);
+        tbody tr:nth-child(odd) {
+            background: transparent;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(0, 0, 0, 0.035);
+        }
+
+        tbody tr:hover {
+            background: rgba(45, 106, 79, 0.08);
         }
 
         .positive {

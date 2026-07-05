@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 美股日报 HTML → Telegram 分段发送脚本
-对应原 shell: /root/us_stock_daily/send_tg_report.sh
+对应原 shell: /root/stock_daily/send_tg_report.sh
 
 支持从同目录 config.ini 读取配置，实现发送频道解耦。
 """

@@ -1,14 +1,31 @@
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+import argparse
 import json
 import datetime
+import sys
 
-def generate_report():
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-file", default=None)
+    parser.add_argument("--today", default=None)
+    return parser.parse_args()
+
+
+def data_file_path(args):
+    if args.data_file:
+        return Path(args.data_file)
+    today = args.today or datetime.date.today().strftime("%Y-%m-%d")
+    return Path(f"/root/stock_daily/daily_news/market_data_{today}.json")
+
+
+def generate_report(args=None):
     """生成美股日报报告"""
+    args = args or parse_args()
     # 加载JSON数据
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    data_file = Path(f"/root/us_stock_daily/daily_news/market_data_{today}.json")
-    
+    data_file = data_file_path(args)
+
     if not data_file.exists():
         print(f"❌ 数据文件 {data_file} 不存在")
         return False
@@ -233,24 +250,33 @@ def generate_report():
         "ai_crowding_risk_level": "中高",
         "earnings_risk_status": "中等",
         "earnings_risk_level": "中",
-        "market_conclusion": "指数分化，科技股表现强劲，AI主线延续，市场宽度改善",
-        "market_phase": "强趋势上涨",
-        "trading_bias": "适合逢低布局AI相关股票，控制仓位避免追高",
-        "key_signals": [
+    }
+
+    # 15. 动态最终结论
+    try:
+        from final_conclusion import analyze_session
+        conclusion = analyze_session(data)
+        report_data.update(conclusion)
+    except Exception as e:
+        print(f"⚠️  最终结论生成失败，使用硬编码兜底：{e}", file=sys.stderr)
+        report_data.setdefault("market_conclusion", "指数分化，科技股表现强劲，AI主线延续，市场宽度改善")
+        report_data.setdefault("market_phase", "强趋势上涨")
+        report_data.setdefault("trading_bias", "适合逢低布局AI相关股票，控制仓位避免追高")
+        report_data.setdefault("key_signals", [
             "10Y美债收益率接近4.5%关键位",
             "纳指RSI进入超买区域",
             "半导体板块新高数量增加",
             "AI软件股开始补涨",
-            "市场宽度改善信号"
-        ]
-    }
-    
+            "市场宽度改善信号",
+        ])
+
     # 渲染模板
+    today = data_file.stem.replace("market_data_", "") if "market_data_" in data_file.stem else datetime.date.today().strftime("%Y-%m-%d")
     generated_at = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
     html_content = template.render(generated_at=generated_at, **report_data)
     
     # 保存报告
-    output_dir = Path("/root/us_stock_daily/files") / today
+    output_dir = Path("/root/stock_daily/files") / today
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"美股收盘日报_{today}.html"
     
