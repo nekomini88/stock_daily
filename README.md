@@ -13,6 +13,8 @@ stock_daily/
 │   └── report.html.j2               # Jinja2 报告模板
 ├── send_tg_report.py                # HTML → Telegram 等宽文本，自动分段并发送
 ├── send_report_email.py             # 发送 HTML 邮件
+├── docker-compose.yml               # Docker 静态部署
+├── Caddyfile                        # Caddy 配置
 └── config.ini                       # 私密配置，不提交
 ```
 
@@ -33,3 +35,26 @@ bash stock_daily.sh
 ## 隐私
 
 不把敏感内容提交到 GitHub，`config.ini` 已写入 `.gitignore`。
+
+## Docker 部署
+
+提供 `docker-compose.yml`，使用 Caddy 容器直接提供 `index/index.html` 静态站点访问。
+
+```bash
+docker compose up -d
+```
+
+访问：
+- 本地：http://localhost:9005
+- 宿主机 IP：http://<IP>:9005
+
+服务会：
+- 读取项目目录下的 `index/` 作为 webroot
+- 返回当前最新日报 `index.html`
+- 容器名：`stock_daily`
+- 端口：`9005:80`
+
+停止：
+```bash
+docker compose down
+```
