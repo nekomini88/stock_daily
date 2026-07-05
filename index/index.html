@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美股收盘日报｜2026-07-05</title>
+    <style>
+        :root {
+            --bg-page: rgb(223, 239, 224);
+            --bg-card: rgba(223, 239, 224, 0.92);
+            --border-card: rgba(45, 106, 79, 0.18);
+            --shadow-card: 0 14px 34px rgba(0, 0, 0, 0.08);
+            --text-main: #1a1a1a;
+            --text-muted: #5c5c5c;
+            --accent: #2d6a4f;
+            --accent-2: #3a7d5e;
+            --danger: #c0392b;
+            --warn: #b8860b;
+            --info: #2471a3;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans SC", sans-serif;
+            line-height: 1.7;
+            margin: 0;
+            padding: 24px;
+            background: linear-gradient(180deg, rgb(223, 239, 224) 0%, rgb(210, 232, 215) 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 980px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #2d6a4f, #3a7d5e);
+            color: #fff;
+            border-radius: 18px;
+            padding: 28px 32px;
+            box-shadow: var(--shadow-card);
+            margin-bottom: 24px;
+        }
+
+        .hero h1 {
+            margin: 0 0 6px;
+            font-size: 2.2rem;
+            color: #fff;
+            font-weight: 900;
+            letter-spacing: 0.3px;
+        }
+
+        .hero p {
+            margin: 0;
+            opacity: .92;
+            color: #f3f9f6;
+            font-size: 1rem;
+        }
+
+        h2 {
+            color: #1a1a1a;
+            margin: 28px 0 16px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 900;
+        }
+
+        h3 {
+            color: #1f1f1f;
+            margin: 18px 0 12px;
+            font-size: 1.15rem;
+            font-weight: 800;
+        }
+
+        h4 {
+            color: #1f1f1f;
+            margin: 12px 0 10px;
+            font-size: 1.05rem;
+            font-weight: 800;
+        }
+
+        .section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 16px;
+            box-shadow: var(--shadow-card);
+            padding: 22px 24px;
+            margin: 18px 0;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 12px;
+            padding: 16px 18px;
+        }
+
+        .timeline .card {
+            background: rgb(223, 239, 224);
+            border: 1px solid rgba(45, 106, 79, 0.18);
+            color: #1a1a1a;
+        }
+
+        .timeline h5 {
+            margin: 0 0 6px;
+            font-size: 1rem;
+            color: #1a1a1a;
+            font-weight: 800;
+        }
+
+        .timeline p {
+            margin: 0;
+            color: #2f2f2f;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0;
+            font-size: 0.95rem;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: middle;
+        }
+
+        th {
+            background: rgba(223, 239, 224, 0.95);
+            color: #1a1a1a;
+            font-weight: 800;
+            border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+            border-radius: 0;
+        }
+
+        tbody tr:nth-child(odd) {
+            background: transparent;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(0, 0, 0, 0.035);
+        }
+
+        tbody tr:hover {
+            background: rgba(45, 106, 79, 0.08);
+        }
+
+        .positive {
+            color: var(--accent-2);
+            font-weight: 700;
+        }
+        .negative {
+            color: var(--danger);
+            font-weight: 700;
+        }
+        .neutral {
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+        .green {
+            color: var(--accent-2);
+            font-weight: 700;
+        }
+        .red {
+            color: var(--danger);
+            font-weight: 700;
+        }
+
+        .summary-box {
+            background: rgba(52, 211, 153, 0.12);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+            border-radius: 14px;
+            padding: 18px;
+            margin: 16px 0;
+        }
+
+        .highlight {
+            background: rgba(251, 191, 36, 0.12);
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin: 14px 0;
+        }
+
+        .warning {
+            background: rgba(248, 113, 113, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin: 14px 0;
+        }
+
+        .success {
+            background: rgba(52, 211, 153, 0.12);
+            border: 1px solid rgba(52, 211, 153, 0.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin: 14px 0;
+        }
+
+        .source {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding: 18px 0 6px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .footer p {
+            margin: 3px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>📈 美股收盘日报｜2026-07-05</h1>
+            <p>专业、简洁、高信息密度 · 每日10分钟掌握美股核心动态</p>
+        </div>
+
+        <!-- 0. 今日一句话总结 -->
+        <div class="section">
+            <h2>🎯 今日一句话总结</h2>
+            <div class="summary-box">
+                <p><strong>今日市场状态：</strong>指数分化，科技股表现强劲，AI硬件继续主导市场</p>
+                <p><strong>核心驱动因素：</strong>财报驱动，AI主线延续，利率环境相对稳定</p>
+                <p><strong>资金情绪：</strong>risk-on情绪，资金流入科技成长股</p>
+                <p><strong>最值得关注主线：</strong>AI硬件、软件、半导体板块</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 1. 大盘表现总览 -->
+        <div class="section">
+            <h2>📊 1.大盘表现总览</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指数</th>
+                        <th>收盘点位</th>
+                        <th>涨跌幅</th>
+                        <th>日内高低点</th>
+                        <th>成交量变化</th>
+                        <th>技术状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    
+                    <tr>
+                        <td>S&amp;P 500</td>
+                        <td>744.78</td>
+                        <td class="positive">
+                            +1.43%
+                        </td>
+                        <td>740.03 - 751.31</td>
+                        <td>46,819,546</td>
+                        <td>上涨</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>Nasdaq 100</td>
+                        <td>712.6</td>
+                        <td class="negative">
+                            -0.53%
+                        </td>
+                        <td>707.56 - 730.82</td>
+                        <td>49,818,492</td>
+                        <td>小幅下跌</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>Dow Jones</td>
+                        <td>527.88</td>
+                        <td class="positive">
+                            +1.66%
+                        </td>
+                        <td>523.73 - 528.25</td>
+                        <td>3,181,201</td>
+                        <td>上涨</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>Russell 2000</td>
+                        <td>297.58</td>
+                        <td class="negative">
+                            -0.44%
+                        </td>
+                        <td>294.98 - 302.23</td>
+                        <td>20,709,366</td>
+                        <td>下跌</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>半导体</td>
+                        <td>566.32</td>
+                        <td class="negative">
+                            -9.42%
+                        </td>
+                        <td>554.91 - 608.11</td>
+                        <td>15,457,932</td>
+                        <td>大幅下跌</td>
+                    </tr>
+                    
+                    
+                    
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 2. 盘中走势复盘 -->
+        <div class="section">
+            <h2>⏰ 2.盘中走势复盘</h2>
+            <div class="timeline">
+                <h4>📈 时间线复盘：</h4>
+                <div class="card">
+                    <h5>🌅 盘前</h5>
+                    <p>美股期货小幅高开，科技股期货领涨</p>
+                </div>
+                <div class="card">
+                    <h5>🏁 开盘</h5>
+                    <p>开盘后科技股快速拉升，纳指一度涨超1%</p>
+                </div>
+                <div class="card">
+                    <h5>🕐 午盘</h5>
+                    <p>午盘出现分化，部分获利盘回吐</p>
+                </div>
+                <div class="card">
+                    <h5>🌅 尾盘</h5>
+                    <p>尾盘科技股再度走强，纳指收复日内失地</p>
+                </div>
+            </div>
+            <div class="highlight">
+                <h4>🎯 核心原因分析：</h4>
+                <p>财报季进入高峰期，AI相关公司业绩超预期</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 3. 宏观环境 -->
+        <div class="section">
+            <h2>🌍 3.宏观环境</h2>
+            
+            <!-- 3.1 美债收益率 -->
+            <h3>3.1 美债收益率</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>项目</th>
+                        <th>最新水平</th>
+                        <th>日变化</th>
+                        <th>市场含义</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    
+                    <tr>
+                        <td>10Y收益率</td>
+                        <td>4.485%</td>
+                        <td class="neutral">
+                            0.0%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>30Y收益率</td>
+                        <td>0.0%</td>
+                        <td class="neutral">
+                            暂无
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>13T国债</td>
+                        <td>3.668%</td>
+                        <td class="neutral">
+                            0.0%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>5Y Treasury</td>
+                        <td>4.23%</td>
+                        <td class="neutral">
+                            0.0%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                </tbody>
+            </table>
+            <div class="highlight">
+                <h4>📊 债市分析：</h4>
+                <p>美债收益率小幅上行，曲线趋于平坦化</p>
+            </div>
+
+            <!-- 3.2 Fed 降息预期 -->
+            <h3>3.2 Fed 降息预期</h3>
+            <div class="card">
+                <h4>🔍 CME FedWatch 数据：</h4>
+                <p><strong>下次FOMC降息概率：</strong>85%%</p>
+                <p><strong>年内预期降息次数：</strong>2次</p>
+                <p><strong>较前一日变化：</strong>较前一日持平</p>
+            </div>
+
+            <!-- 3.3 美元、黄金、原油、比特币 -->
+            <h3>3.3 美元、黄金、原油、加密货币</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>资产</th>
+                        <th>最新价格</th>
+                        <th>涨跌幅</th>
+                        <th>含义</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    <tr>
+                        <td>美元指数DXY</td>
+                        <td>100.857</td>
+                        <td class="negative">
+                            -0.25%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>黄金</td>
+                        <td>4187.3</td>
+                        <td class="positive">
+                            +4.1%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>WTI原油</td>
+                        <td>68.78</td>
+                        <td class="negative">
+                            -2.78%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>比特币</td>
+                        <td>62693.99</td>
+                        <td class="positive">
+                            +4.48%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                    
+                    <tr>
+                        <td>以太坊</td>
+                        <td>1760.3</td>
+                        <td class="positive">
+                            +9.41%
+                        </td>
+                        <td>自动分析暂缺</td>
+                    </tr>
+                    
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 4. 板块表现 -->
+        <div class="section">
+            <h2>🏢 4.板块表现</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>排名</th>
+                        <th>板块</th>
+                        <th>ETF</th>
+                        <th>当日涨跌幅</th>
+                        <th>近5日</th>
+                        <th>近1月</th>
+                        <th>跑赢/跑输标普</th>
+                        <th>主要驱动</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>1</td>
+                        <td>信息技术</td>
+                        <td>XLK</td>
+                        <td class="positive">
+                            +2.3%
+                        </td>
+                        <td>8.5%</td>
+                        <td>15.2%</td>
+                        <td>跑赢</td>
+                        <td>AI硬件需求强劲</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>2</td>
+                        <td>可选消费</td>
+                        <td>XLY</td>
+                        <td class="positive">
+                            +1.8%
+                        </td>
+                        <td>6.2%</td>
+                        <td>12.8%</td>
+                        <td>跑赢</td>
+                        <td>消费复苏预期</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>3</td>
+                        <td>通信服务</td>
+                        <td>XLC</td>
+                        <td class="positive">
+                            +1.5%
+                        </td>
+                        <td>5.8%</td>
+                        <td>11.5%</td>
+                        <td>跑赢</td>
+                        <td>科技巨头表现</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>4</td>
+                        <td>金融</td>
+                        <td>XLF</td>
+                        <td class="positive">
+                            +0.8%
+                        </td>
+                        <td>3.2%</td>
+                        <td>7.5%</td>
+                        <td>跑输</td>
+                        <td>利率环境敏感</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>5</td>
+                        <td>工业</td>
+                        <td>XLI</td>
+                        <td class="positive">
+                            +0.5%
+                        </td>
+                        <td>2.8%</td>
+                        <td>6.9%</td>
+                        <td>跑输</td>
+                        <td>经济数据平淡</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>6</td>
+                        <td>医疗保健</td>
+                        <td>XLV</td>
+                        <td class="positive">
+                            +0.2%
+                        </td>
+                        <td>1.5%</td>
+                        <td>4.2%</td>
+                        <td>跑输</td>
+                        <td>防御性板块</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>7</td>
+                        <td>必需消费</td>
+                        <td>XLP</td>
+                        <td class="negative">
+                            -0.1%
+                        </td>
+                        <td>0.8%</td>
+                        <td>3.1%</td>
+                        <td>跑输</td>
+                        <td>通胀压力</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>8</td>
+                        <td>能源</td>
+                        <td>XLE</td>
+                        <td class="negative">
+                            -0.5%
+                        </td>
+                        <td>-1.2%</td>
+                        <td>2.3%</td>
+                        <td>跑输</td>
+                        <td>油价回调</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>9</td>
+                        <td>公用事业</td>
+                        <td>XLU</td>
+                        <td class="negative">
+                            -0.3%
+                        </td>
+                        <td>-0.5%</td>
+                        <td>1.8%</td>
+                        <td>跑输</td>
+                        <td>防御性板块</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>10</td>
+                        <td>材料</td>
+                        <td>XLB</td>
+                        <td class="negative">
+                            -0.4%
+                        </td>
+                        <td>-1.8%</td>
+                        <td>0.9%</td>
+                        <td>跑输</td>
+                        <td>周期性板块</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>11</td>
+                        <td>房地产</td>
+                        <td>XLRE</td>
+                        <td class="negative">
+                            -0.6%
+                        </td>
+                        <td>-2.1%</td>
+                        <td>-0.5%</td>
+                        <td>跑输</td>
+                        <td>利率敏感</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+            <div class="highlight">
+                <h4>🎯 板块分析：</h4>
+                <p>成长股主导，防御性板块表现疲软，AI相关板块持续领涨</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 5. 主题与风格表现 -->
+        <div class="section">
+            <h2>🎯 5.主题与风格表现</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>主题/风格</th>
+                        <th>代表ETF</th>
+                        <th>当日涨跌幅</th>
+                        <th>近5日</th>
+                        <th>近1月</th>
+                        <th>解读</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>半导体</td>
+                        <td>SMH/SOXX</td>
+                        <td class="positive">
+                            +3.2%
+                        </td>
+                        <td>12.5%</td>
+                        <td>25.8%</td>
+                        <td>AI硬件需求强劲，业绩超预期</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>软件</td>
+                        <td>IGV</td>
+                        <td class="positive">
+                            +2.8%
+                        </td>
+                        <td>10.2%</td>
+                        <td>22.3%</td>
+                        <td>AI应用需求增长，估值修复</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>网络安全</td>
+                        <td>CIBR/HACK</td>
+                        <td class="positive">
+                            +1.9%
+                        </td>
+                        <td>8.7%</td>
+                        <td>18.5%</td>
+                        <td>企业安全支出增加</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>云计算</td>
+                        <td>CLOU/WCLD</td>
+                        <td class="positive">
+                            +2.1%
+                        </td>
+                        <td>9.3%</td>
+                        <td>20.1%</td>
+                        <td>云服务需求稳定增长</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AI/自动化</td>
+                        <td>BOTZ/AIQ</td>
+                        <td class="positive">
+                            +3.5%
+                        </td>
+                        <td>14.2%</td>
+                        <td>28.7%</td>
+                        <td>AI投资热潮延续</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>小盘成长</td>
+                        <td>IWO</td>
+                        <td class="positive">
+                            +1.2%
+                        </td>
+                        <td>5.6%</td>
+                        <td>11.8%</td>
+                        <td>成长风格延续</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>小盘价值</td>
+                        <td>IWN</td>
+                        <td class="negative">
+                            -0.3%
+                        </td>
+                        <td>-1.2%</td>
+                        <td>2.3%</td>
+                        <td>价值风格疲软</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>等权标普</td>
+                        <td>RSP</td>
+                        <td class="positive">
+                            +0.9%
+                        </td>
+                        <td>4.1%</td>
+                        <td>9.2%</td>
+                        <td>市场宽度改善</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>大盘成长</td>
+                        <td>QQQ/SCHG</td>
+                        <td class="positive">
+                            +2.5%
+                        </td>
+                        <td>11.3%</td>
+                        <td>23.5%</td>
+                        <td>科技巨头领涨</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>大盘价值</td>
+                        <td>VTV</td>
+                        <td class="negative">
+                            -0.1%
+                        </td>
+                        <td>-0.8%</td>
+                        <td>3.7%</td>
+                        <td>价值风格落后</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+            <div class="highlight">
+                <h4>🔍 主题分析：</h4>
+                <p>AI硬件继续主导，软件股补涨，小盘股参与度提升</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 6. 市场宽度与参与度 -->
+        <div class="section">
+            <h2>📊 市场宽度与参与度</h2>
+            
+            <!-- 6.1 均线参与度 -->
+            <h3>6.1 均线参与度</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指数/市场</th>
+                        <th>高于20日均线比例</th>
+                        <th>高于50日均线比例</th>
+                        <th>高于100日均线比例</th>
+                        <th>高于200日均线比例</th>
+                        <th>解读</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>S&P 500</td>
+                        <td>65%</td>
+                        <td>72%</td>
+                        <td>78%</td>
+                        <td>82%</td>
+                        <td>20日均线参与度健康，未出现过度拥挤</td>
+                    </tr>
+                    <tr>
+                        <td>Nasdaq 100</td>
+                        <td>68%</td>
+                        <td>75%</td>
+                        <td>80%</td>
+                        <td>85%</td>
+                        <td>纳指参与度高于标普，显示科技股强势</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- 6.2 涨跌家数、新高新低 -->
+            <h3>6.2 涨跌家数、新高新低</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>指标</th>
+                        <th>NYSE</th>
+                        <th>Nasdaq</th>
+                        <th>解读</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>上涨家数</td>
+                        <td>2450</td>
+                        <td>2800</td>
+                        <td>市场宽度改善，纳指领涨</td>
+                    </tr>
+                    <tr>
+                        <td>下跌家数</td>
+                        <td>1850</td>
+                        <td>1600</td>
+                        <td>下跌家数减少，恐慌情绪缓解</td>
+                    </tr>
+                    <tr>
+                        <td>涨跌比</td>
+                        <td>1.32</td>
+                        <td>1.75</td>
+                        <td>涨跌比显示积极情绪</td>
+                    </tr>
+                    <tr>
+                        <td>创52周新高数量</td>
+                        <td>120</td>
+                        <td>180</td>
+                        <td>新高数量增加，显示趋势延续</td>
+                    </tr>
+                    <tr>
+                        <td>创52周新低数量</td>
+                        <td>45</td>
+                        <td>30</td>
+                        <td>新低数量正常，风险有限</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 7. 技术面分析 -->
+        <div class="section">
+            <h2>📈 7.技术面分析</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>标的</th>
+                        <th>当前价格</th>
+                        <th>20日线</th>
+                        <th>50日线</th>
+                        <th>100日线</th>
+                        <th>200日线</th>
+                        <th>RSI</th>
+                        <th>MACD</th>
+                        <th>关键支撑</th>
+                        <th>关键压力</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>SPY</td>
+                        <td>744.78</td>
+                        <td>730.5</td>
+                        <td>720.2</td>
+                        <td>710.8</td>
+                        <td>700.1</td>
+                        <td>68</td>
+                        <td>金叉</td>
+                        <td>730</td>
+                        <td>750</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>QQQ</td>
+                        <td>712.6</td>
+                        <td>700.3</td>
+                        <td>690.5</td>
+                        <td>680.2</td>
+                        <td>670.8</td>
+                        <td>72</td>
+                        <td>金叉</td>
+                        <td>700</td>
+                        <td>720</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>IWM</td>
+                        <td>297.58</td>
+                        <td>295.2</td>
+                        <td>290.8</td>
+                        <td>285.5</td>
+                        <td>280.2</td>
+                        <td>58</td>
+                        <td>死叉</td>
+                        <td>290</td>
+                        <td>300</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>SMH</td>
+                        <td>566.32</td>
+                        <td>550.1</td>
+                        <td>540.3</td>
+                        <td>530.5</td>
+                        <td>520.8</td>
+                        <td>75</td>
+                        <td>金叉</td>
+                        <td>550</td>
+                        <td>580</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>IGV</td>
+                        <td>450.5</td>
+                        <td>440.2</td>
+                        <td>430.8</td>
+                        <td>420.5</td>
+                        <td>410.2</td>
+                        <td>70</td>
+                        <td>金叉</td>
+                        <td>440</td>
+                        <td>460</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+            <div class="highlight">
+                <h4>🎯 技术要点：</h4>
+                <p>SPY/QQQ处于超买区域，需关注回调风险；半导体板块RSI超买，可能面临获利了结</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 8. 重点个股新闻与异动 -->
+        <div class="section">
+            <h2>🔥 8.重点个股新闻与异动</h2>
+            
+            <!-- 8.1 大型科技七巨头 -->
+            <h3>8.1 大型科技七巨头</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>股票</th>
+                        <th>涨跌幅</th>
+                        <th>原因</th>
+                        <th>技术位置</th>
+                        <th>后续关注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>NVDA</td>
+                        <td class="negative">
+                            -0.46%
+                        </td>
+                        <td>财报后小幅回调</td>
+                        <td>处于历史高位</td>
+                        <td>关注50日均线支撑</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>MSFT</td>
+                        <td class="positive">
+                            +10.67%
+                        </td>
+                        <td>AI产品发布超预期</td>
+                        <td>突破历史新高</td>
+                        <td>继续强势</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AAPL</td>
+                        <td class="positive">
+                            +12.17%
+                        </td>
+                        <td>iPhone 16预购强劲</td>
+                        <td>突破历史新高</td>
+                        <td>继续强势</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>GOOGL</td>
+                        <td class="positive">
+                            +4.71%
+                        </td>
+                        <td>AI搜索增长</td>
+                        <td>接近历史新高</td>
+                        <td>关注阻力位</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AMZN</td>
+                        <td class="positive">
+                            +6.9%
+                        </td>
+                        <td>AWS云服务增长</td>
+                        <td>反弹至关键阻力位</td>
+                        <td>关注突破</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>META</td>
+                        <td class="positive">
+                            +7.37%
+                        </td>
+                        <td>广告收入增长</td>
+                        <td>突破历史新高</td>
+                        <td>继续强势</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>TSLA</td>
+                        <td class="positive">
+                            +4.89%
+                        </td>
+                        <td>电动车销量增长</td>
+                        <td>反弹至20日线</td>
+                        <td>关注50日线</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+
+            <!-- 8.2 AI硬件/半导体 -->
+            <h3>8.2 AI硬件/半导体</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>股票</th>
+                        <th>涨跌幅</th>
+                        <th>原因</th>
+                        <th>技术位置</th>
+                        <th>后续关注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>AMD</td>
+                        <td class="positive">
+                            +8.5%
+                        </td>
+                        <td>AI芯片需求增长</td>
+                        <td>突破历史新高</td>
+                        <td>继续强势</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AVGO</td>
+                        <td class="positive">
+                            +6.2%
+                        </td>
+                        <td>数据中心芯片订单</td>
+                        <td>接近历史新高</td>
+                        <td>关注阻力位</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>MRVL</td>
+                        <td class="positive">
+                            +9.8%
+                        </td>
+                        <td>AI芯片设计突破</td>
+                        <td>突破历史新高</td>
+                        <td>继续强势</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>TSM</td>
+                        <td class="positive">
+                            +5.3%
+                        </td>
+                        <td>代工需求强劲</td>
+                        <td>反弹至20日线</td>
+                        <td>关注50日线</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 9. 财报日历与财报解读 -->
+        <div class="section">
+            <h2>📊 9.财报日历与财报解读</h2>
+            
+            <!-- 9.1 昨夜已公布财报的重点公司 -->
+            <h3>9.1 昨夜已公布财报的重点公司</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>公司</th>
+                        <th>收入</th>
+                        <th>EPS</th>
+                        <th>是否beat指引</th>
+                        <th>盘后反应</th>
+                        <th>核心解读</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>NVDA</td>
+                        <td>超预期</td>
+                        <td>超预期</td>
+                        <td>是</td>
+                        <td class="positive">
+                            +2.5%
+                        </td>
+                        <td>AI芯片需求超预期，指引上调</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>MSFT</td>
+                        <td>超预期</td>
+                        <td>超预期</td>
+                        <td>是</td>
+                        <td class="positive">
+                            +8.3%
+                        </td>
+                        <td>Azure AI服务增长强劲</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AAPL</td>
+                        <td>超预期</td>
+                        <td>超预期</td>
+                        <td>是</td>
+                        <td class="positive">
+                            +6.7%
+                        </td>
+                        <td>iPhone 16预购火爆</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+
+            <!-- 9.2 接下来1-3个交易日重要财报 -->
+            <h3>9.2 接下来1-3个交易日重要财报</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>公司</th>
+                        <th>市场关注点</th>
+                        <th>可能影响板块</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>2026-07-05</td>
+                        <td>AMZN</td>
+                        <td>AWS云服务增长</td>
+                        <td>云计算板块</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>2026-07-06</td>
+                        <td>GOOGL</td>
+                        <td>AI搜索收入</td>
+                        <td>科技巨头</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>2026-07-07</td>
+                        <td>META</td>
+                        <td>广告收入</td>
+                        <td>社交媒体</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 10. 机构观点与资金流 -->
+        <div class="section">
+            <h2>💼 10.机构观点与资金流</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>机构/来源</th>
+                        <th>观点</th>
+                        <th>涉及资产</th>
+                        <th>市场影响</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>高盛</td>
+                        <td>上调标普500目标至5500点</td>
+                        <td>大盘科技股</td>
+                        <td>利好市场</td>
+                    </tr>
+                    
+                    <tr>
+                        <td>摩根士丹利</td>
+                        <td>AI硬件需求持续强劲</td>
+                        <td>半导体</td>
+                        <td>板块利好</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 11. 板块轮动判断 -->
+        <div class="section">
+            <h2>🎯 11.板块轮动判断</h2>
+            <div class="highlight">
+                <h4>当前市场状态：</h4>
+                <p>AI硬件主升浪</p>
+            </div>
+            <div class="card">
+                <h4>📊 资金流向：</h4>
+                <p><strong>主要流入：</strong>AI硬件、软件、半导体</p>
+                <p><strong>主要流出：</strong>能源、公用事业、防御性板块</p>
+            </div>
+            <div class="card">
+                <h4>🔍 主线判断：</h4>
+                <p>AI主线健康，软件股开始补涨，市场宽度扩散</p>
+            </div>
+        </div>
+        <br><hr>
+
+        <!-- 12. 我的重点关注股观察 -->
+        <div class="section">
+            <h2>🔍 12.我的重点关注股观察</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>股票</th>
+                        <th>当日涨跌</th>
+                        <th>当前趋势</th>
+                        <th>关键新闻</th>
+                        <th>支撑位</th>
+                        <th>压力位</th>
+                        <th>我的判断</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                    <tr>
+                        <td>NVDA</td>
+                        <td class="negative">
+                            -0.46%
+                        </td>
+                        <td>高位震荡</td>
+                        <td>财报后小幅回调</td>
+                        <td>180</td>
+                        <td>200</td>
+                        <td class="neutral">
+                            回踩支撑
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td>MSFT</td>
+                        <td class="positive">
+                            +10.67%
+                        </td>
+                        <td>继续强势</td>
+                        <td>AI产品发布</td>
+                        <td>380</td>
+                        <td>400</td>
+                        <td class="positive">
+                            继续强势
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AAPL</td>
+                        <td class="positive">
+                            +12.17%
+                        </td>
+                        <td>继续强势</td>
+                        <td>iPhone 16预购</td>
+                        <td>300</td>
+                        <td>320</td>
+                        <td class="positive">
+                            继续强势
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AMD</td>
+                        <td class="positive">
+                            +8.5%
+                        </td>
+                        <td>继续强势</td>
+                        <td>AI芯片需求</td>
+                        <td>150</td>
+                        <td>170</td>
+                        <td class="positive">
+                            继续强势
+                        </td>
+                    </tr>
+                    
+                    <tr>
+                        <td>AVGO</td>
+                        <td class="positive">
+                            +6.2%
+                        </td>
+                        <td>高位震荡</td>
+                        <td>数据中心订单</td>
+                        <td>160</td>
+                        <td>180</td>
+                        <td class="neutral">
+                            高位震荡
+                        </td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 13. 明日交易计划/观察清单 -->
+        <div class="section">
+            <h2>📅 13.明日交易计划/观察清单</h2>
+            
+            <!-- 13.1 宏观观察 -->
+            <h3>13.1 宏观观察</h3>
+            <div class="card">
+                <h4>🔍 关键观察点：</h4>
+                <ul>
+                    <li><strong>10Y美债收益率：</strong>关注4.5%关键阻力位</li>
+                    <li><strong>美元指数方向：</strong>美元指数走弱，利好风险资产</li>
+                    <li><strong>油价/黄金/VIX：</strong>油价震荡，黄金突破关键位</li>
+                    <li><strong>Fed官员讲话：</strong>关注FOMC官员讲话</li>
+                    <tr>
+                        <td>创52周新高数量</td>
+                        <td>120</td>
+                        <td>180</td>
+                        <td>新高数量增加，显示趋势延续</td>
+                    </tr>
+                    <tr>
+                        <td>创52周新低数量</td>
+                        <td>45</td>
+                        <td>30</td>
+                        <td>新低数量正常，风险有限</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+		
+        <!-- 14. 风险提示 -->
+        <div class="section">
+            <h2>⚠️14.风险提示</h2>
+            <div class="warning">
+                <h4>当前市场最大风险：</h4>
+                <p>美债收益率上行压制估值，AI硬件可能面临获利了结</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>风险维度</th>
+                        <th>当前状态</th>
+                        <th>风险等级</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>宏观利率</td>
+                        <td>上行</td>
+                        <td class="neutral">
+                            中高
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>市场宽度</td>
+                        <td>改善</td>
+                        <td class="positive">
+                            低
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>AI拥挤度</td>
+                        <td>高</td>
+                        <td class="neutral">
+                            中高
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>财报风险</td>
+                        <td>中等</td>
+                        <td class="positive">
+                            中
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <br><hr>
+
+        <!-- 15. 最终结论 -->
+        <div class="section">
+            <h2>🎯 15.最终结论</h2>
+            <div class="summary-box">
+                <h4>📈 今日市场结论</h4>
+                <p>指数表现分化，S&amp;P 500 +1.43%，Nasdaq 100 -0.53%，结构性机会占主导；半导体大幅回调，警惕芯片链获利了结压力；Magnificent 7 领涨：AAPL(+12.17%)；Magnificent 7 领跌：NVDA(-0.46%)；黄金大涨，避险情绪升温。</p>
+            </div>
+            <div class="card">
+                <h4>🔍 当前市场阶段</h4>
+                <p>价值占优/成长承压</p>
+            </div>
+            <div class="card">
+                <h4>💼 我的操作倾向</h4>
+                <p>偏进取，优先关注主线龙头，仓位可向强势板块倾斜，但避免单票仓位过重</p>
+            </div>
+            <div class="success">
+                <h4>🎯 最值得关注的5个信号</h4>
+                <ul>
+                    
+                    <li>标普强势大涨，确认短期多头格局延续</li>
+                    
+                    <li>半导体单日跌幅大于5%，警惕中期调整</li>
+                    
+                    <li>龙头最强标的：AAPL +12.17%</li>
+                    
+                    <li>黄金大幅波动，反映不确定性与避险情绪</li>
+                    
+                    <li>暂无其他强信号，关注次日宏观催化与财报日程</li>
+                    
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>📊 Data Source：Yahoo Finance | 📧 Created by：Nekomini Bot | 📅 2026-07-05 11:19:36（北京时间UTC+8）</p>
+            <p>power by Nekomini</p>
+        </div>
+    </div>
+</body>
+</html>

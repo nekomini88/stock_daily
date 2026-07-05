@@ -6,14 +6,14 @@
     <title>美股收盘日报｜{{ data.date }}</title>
     <style>
         :root {
-            --bg-page: #f0ece1;
-            --bg-card: rgba(247, 243, 233, 0.85);
-            --border-card: rgba(0, 0, 0, 0.08);
+            --bg-page: rgb(223, 239, 224);
+            --bg-card: rgba(223, 239, 224, 0.92);
+            --border-card: rgba(45, 106, 79, 0.18);
             --shadow-card: 0 14px 34px rgba(0, 0, 0, 0.08);
             --text-main: #1a1a1a;
             --text-muted: #5c5c5c;
-            --accent: rgb(247, 243, 233);
-            --accent-2: #2d6a4f;
+            --accent: #2d6a4f;
+            --accent-2: #3a7d5e;
             --danger: #c0392b;
             --warn: #b8860b;
             --info: #2471a3;
@@ -28,7 +28,7 @@
             line-height: 1.7;
             margin: 0;
             padding: 24px;
-            background: linear-gradient(180deg, #f7f3e9 0%, #f0ece1 100%);
+            background: linear-gradient(180deg, rgb(223, 239, 224) 0%, rgb(210, 232, 215) 100%);
             color: var(--text-main);
             min-height: 100vh;
         }
@@ -39,13 +39,28 @@
             position: relative;
         }
 
-        h1 {
-            color: #1a1a1a;
-            text-align: center;
-            margin-bottom: 28px;
+        .hero {
+            background: linear-gradient(135deg, #2d6a4f, #3a7d5e);
+            color: #fff;
+            border-radius: 18px;
+            padding: 28px 32px;
+            box-shadow: var(--shadow-card);
+            margin-bottom: 24px;
+        }
+
+        .hero h1 {
+            margin: 0 0 6px;
             font-size: 2.2rem;
-            letter-spacing: 0.3px;
+            color: #fff;
             font-weight: 900;
+            letter-spacing: 0.3px;
+        }
+
+        .hero p {
+            margin: 0;
+            opacity: .92;
+            color: #f3f9f6;
+            font-size: 1rem;
         }
 
         h2 {
@@ -82,10 +97,28 @@
         }
 
         .card {
-            background: rgba(16, 28, 24, 0.65);
+            background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: 12px;
             padding: 16px 18px;
+        }
+
+        .timeline .card {
+            background: rgb(223, 239, 224);
+            border: 1px solid rgba(45, 106, 79, 0.18);
+            color: #1a1a1a;
+        }
+
+        .timeline h5 {
+            margin: 0 0 6px;
+            font-size: 1rem;
+            color: #1a1a1a;
+            font-weight: 800;
+        }
+
+        .timeline p {
+            margin: 0;
+            color: #2f2f2f;
         }
 
         table {
@@ -97,14 +130,14 @@
 
         th,
         td {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
             padding: 10px 12px;
             text-align: left;
             vertical-align: middle;
         }
 
         th {
-            background: rgba(247, 243, 233, 0.95);
+            background: rgba(223, 239, 224, 0.95);
             color: #1a1a1a;
             font-weight: 800;
             border-bottom: 2px solid rgba(0, 0, 0, 0.08);
@@ -197,7 +230,10 @@
 </head>
 <body>
     <div class="container">
-        <h1>📈 美股收盘日报｜{{ data.date }}</h1>
+        <div class="hero">
+            <h1>📈 美股收盘日报｜{{ data.date }}</h1>
+            <p>专业、简洁、高信息密度 · 每日10分钟掌握美股核心动态</p>
+        </div>
 
         <!-- 0. 今日一句话总结 -->
         <div class="section">
