@@ -273,6 +273,40 @@ def generate_report(args=None):
     # 由数据文件推导报告日期（供 LLM 结论文件定位）
     _today = data_file.stem.replace("market_data_", "") if "market_data_" in data_file.stem else datetime.date.today().strftime("%Y-%m-%d")
 
+    # 14.5 真实板块/主题数据适配：优先用采集的真实数据替换硬编码表格
+    def _adapt_group(group_list, extra=None):
+        """把采集器输出（name/symbol/change_pct）适配为模板字段（name/etf/change/change_5d/change_1m）。"""
+        out = []
+        for item in group_list or []:
+            if not isinstance(item, dict):
+                continue
+            row = {
+                "name": item.get("name", ""),
+                "etf": item.get("symbol", ""),
+                "change": item.get("change_pct"),
+                "change_5d": item.get("change_5d"),
+                "change_1m": item.get("change_1m"),
+            }
+            if isinstance(extra, dict) and extra.get("kind") == "sector":
+                row["vs_sp500"] = "—"
+                row["driver"] = "—"
+            if isinstance(extra, dict) and extra.get("kind") == "theme":
+                row["analysis"] = "—"
+            out.append(row)
+        return out
+
+    real_sectors = data.get("sectors_performance")
+    if isinstance(real_sectors, list) and real_sectors:
+        adapted = _adapt_group(real_sectors, {"kind": "sector"})
+        if adapted:
+            report_data["sectors_performance"] = adapted
+
+    real_themes = data.get("themes_performance")
+    if isinstance(real_themes, list) and real_themes:
+        adapted = _adapt_group(real_themes, {"kind": "theme"})
+        if adapted:
+            report_data["themes_performance"] = adapted
+
     # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
     llm_file = Path(__file__).resolve().parent / "llm_data" / f"market_llm_{_today}.json"
     if llm_file.exists():

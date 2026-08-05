@@ -118,6 +118,19 @@ def fetch_macro():
             results[name] = r
     return results
 
+def fetch_group(symbol_map, category="板块"):
+    """批量抓取一组证券，按名称输出 {name: {symbol, change_pct, price, prev_close, high, low, volume}}"""
+    results = {}
+    for sym, name in symbol_map.items():
+        r = fetch_yahoo(sym)
+        if "error" not in r:
+            item = {"symbol": sym, "name": name,
+                    "price": r.get("price"), "prev_close": r.get("prev_close"),
+                    "change_pct": r.get("change_pct"),
+                    "high": r.get("high"), "low": r.get("low"), "volume": r.get("volume")}
+            results[name] = item
+    return results
+
 def main():
     date_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     output = {"date": date_str, "timestamp": datetime.now().isoformat()}
@@ -139,6 +152,20 @@ def main():
         if "error" not in r:
             stocks[sym] = r
     output["magnificent_7"] = stocks
+
+    # 2.5 板块表现（11 大板块 ETF）
+    print("🏢 获取板块表现...", file=sys.stderr)
+    output["sectors_performance"] = [
+        {**v, "rank": i+1}
+        for i, (name, v) in enumerate(fetch_group(SECTOR_ETFS).items())
+    ]
+
+    # 2.6 主题与风格表现（AI/半导体/风格 ETF）
+    print("🎯 获取主题表现...", file=sys.stderr)
+    output["themes_performance"] = [
+        {**v, "rank": i+1}
+        for i, (name, v) in enumerate(fetch_group(THEME_ETFS).items())
+    ]
 
     # 3. 期货
     print("🔮 获取期货数据...", file=sys.stderr)

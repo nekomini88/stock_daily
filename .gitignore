@@ -8,32 +8,20 @@ venv/
 env/
 .env
 
-# Reports (optional - keep only source)
-# *.html
-# *.txt
-# *.md
+# 敏感/私密
+config.ini
 
-# OS
+# 生成产物（采集数据/报告/LLM结论/静态快照）
+daily_news/
+files/
+llm_data/
+index/
+cron.log
+
+# 操作系统
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
 
 # IDE
 .vscode/
 .idea/
-
-# 隐私/发送链路
-config.ini
-# 生成产物
-files/
-
-# 敏感产物/缓存
-__pycache__/
-
-__pycache__/
-*.pyc
-cron.log
-files/
-daily_news/
