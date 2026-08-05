@@ -24,7 +24,28 @@ config.read(CONFIG_PATH, encoding="utf-8")
 DEFAULT_CHAT = config.get("telegram", "chat_id", fallback="-1004363733232")
 CHUNK_LIMIT = config.getint("telegram", "chunk_limit", fallback=3900)
 
-HERMES_CMD = ["hermes", "send", "--to"]
+# hermes CLI 定位：cron 环境 PATH 不含 hermes，需用绝对路径。
+# 优先 <HOME>/.local/bin/hermes，其次 PATH 里的 hermes
+import shutil, os
+_HOME = os.path.expanduser("~")
+_HERMES_CANDIDATES = [
+    str(Path(_HOME) / ".local/bin/hermes"),
+    str(Path("/root") / ".local/bin/hermes"),
+    "hermes",  # 最后的 PATH 兜底
+]
+_HERMES_CMD = os.environ.get("HERMES_CMD_PATH")
+if not _HERMES_CMD:
+    for _c in _HERMES_CANDIDATES:
+        if _c == "hermes":
+            _found = shutil.which("hermes")
+            if _found:
+                _HERMES_CMD = _found
+                break
+        elif Path(_c).is_file():
+            _HERMES_CMD = _c
+            break
+_HERMES_CMD = _HERMES_CMD or "hermes"
+HERMES_CMD = [_HERMES_CMD, "send", "--to"]
 
 
 # ─── HTML → Telegram 等宽纯文本 ─────────────────────────────
