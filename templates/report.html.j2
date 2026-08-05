@@ -338,7 +338,7 @@
                         <td class="{% if bond.change_pct != '暂无' and bond.change_pct > 0 %}positive{% elif bond.change_pct != '暂无' and bond.change_pct < 0 %}negative{% else %}neutral{% endif %}">
                             {% if bond.change_pct != '暂无' %}{% if bond.change_pct > 0 %}+{% endif %}{{ bond.change_pct|round(2) }}%{% else %}暂无{% endif %}
                         </td>
-                        <td>自动分析暂缺</td>
+                        <td>{{ bond_meaning(name, bond) }}</td>
                     </tr>
                     {% endif %}
                     {% endfor %}
@@ -378,7 +378,7 @@
                         <td class="{% if asset.change_pct > 0 %}positive{% elif asset.change_pct < 0 %}negative{% else %}neutral{% endif %}">
                             {% if asset.change_pct > 0 %}+{% endif %}{{ asset.change_pct|round(2) }}%
                         </td>
-                        <td>自动分析暂缺</td>
+                        <td>{{ asset_meaning(name, asset) }}</td>
                     </tr>
                     {% endif %}
                     {% endfor %}

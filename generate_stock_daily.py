@@ -126,8 +126,8 @@ def generate_report(args=None):
     env.filters['compact'] = compact_number
     env.filters['round'] = round_value
     env.globals['technical_status'] = technical_status
-    env.globals['bond_analysis'] = bond_analysis
-    env.globals['asset_analysis'] = asset_analysis
+    env.globals['bond_meaning'] = bond_analysis
+    env.globals['asset_meaning'] = asset_analysis
     
     # 加载模板
     template = env.get_template("report.html.j2")
@@ -306,6 +306,67 @@ def generate_report(args=None):
     _today = data_file.stem.replace("market_data_", "") if "market_data_" in data_file.stem else datetime.date.today().strftime("%Y-%m-%d")
 
     # 14.5 真实板块/主题数据适配：优先用采集的真实数据替换硬编码表格
+    # 标普500当日涨跌（用于板块跑赢/跑输判断）
+    _sp500_name = "S&P 500"
+    _sp_chg_raw = (data.get("indices") or {}).get(_sp500_name, {}).get("change_pct")
+    try:
+        sp500_chg = float(_sp_chg_raw) if _sp_chg_raw is not None else None
+    except (TypeError, ValueError):
+        sp500_chg = None
+
+    # 板块驱动（基于涨跌幅与板块属性的轻量动态解读，不含编造突发新闻）
+    _SECTOR_BASE = {
+        "信息技术": "科技权重主导，AI/半导体景气度高企",
+        "通信服务": "平台与广告收入驱动",
+        "可选消费": "消费与旅游需求波动",
+        "金融": "利率曲线与信贷环境敏感",
+        "工业": "制造业景气与资本开支",
+        "医疗保健": "防御属性，政策/研发周期主导",
+        "必需消费": "必需需求稳定，防御属性",
+        "能源": "油价与能源价格联动",
+        "公用事业": "防御性，利率敏感",
+        "材料": "周期品价格与地产需求",
+        "房地产": "利率与 REITs 周期",
+    }
+    def _sector_driver(name, chg):
+        base = _SECTOR_BASE.get(name, "板块基本面")
+        try:
+            c = float(chg)
+        except (TypeError, ValueError):
+            return base
+        if c >= 2:
+            return f"{base}，放量大涨"
+        elif c <= -2:
+            return f"{base}，承压回落"
+        return f"{base}，窄幅整理"
+
+    def _vs_sp500(chg, sp_chg):
+        try:
+            c = float(chg); s = float(sp_chg)
+        except (TypeError, ValueError):
+            return "—"
+        diff = c - s
+        if diff >= 0.5:
+            return "跑赢"
+        elif diff <= -0.5:
+            return "跑输"
+        return "持平"
+
+    def _theme_analysis(name, chg):
+        try:
+            c = float(chg)
+        except (TypeError, ValueError):
+            return "主题表现待观察"
+        if c >= 3:
+            return f"主题强势，当日+{c:.1f}%"
+        elif c <= -3:
+            return f"主题回调，当日{c:+.1f}%"
+        elif c > 0:
+            return f"温和走强，当日+{c:.1f}%"
+        elif c < 0:
+            return f"小幅走弱，当日{c:+.1f}%"
+        return "基本持平"
+
     def _adapt_group(group_list, extra=None):
         """把采集器输出（name/symbol/change_pct）适配为模板字段（name/etf/change/change_5d/change_1m）。"""
         out = []
@@ -320,10 +381,10 @@ def generate_report(args=None):
                 "change_1m": item.get("change_1m"),
             }
             if isinstance(extra, dict) and extra.get("kind") == "sector":
-                row["vs_sp500"] = "—"
-                row["driver"] = "—"
+                row["vs_sp500"] = _vs_sp500(item.get("change_pct"), sp500_chg)
+                row["driver"] = _sector_driver(item.get("name"), item.get("change_pct"))
             if isinstance(extra, dict) and extra.get("kind") == "theme":
-                row["analysis"] = "—"
+                row["analysis"] = _theme_analysis(item.get("name"), item.get("change_pct"))
             out.append(row)
         return out
 
