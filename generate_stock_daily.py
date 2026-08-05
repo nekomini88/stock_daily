@@ -403,8 +403,8 @@ def generate_report(args=None):
     # 15a. 真实技术面表覆盖：用真实指数价格构造（price/当日涨跌/日高日低真实），MA/RSI/MACD 标注暂无
     #     移除原先硬编码的假均线/RSI/MACD（如 SPY 744.78 与真实 769.79 矛盾）
     _symbol_alias = {
-        "S&P 500": "SPY", "Nasdaq 100": "QQQ", "Dow Jones": "DIA",
-        "Russell 2000": "IWM", "半导体": "SOXX", "VIX": "VIX",
+        "S&P 500": "^GSPC", "Nasdaq 100": "^IXIC", "Dow Jones": "^DJI",
+        "Russell 2000": "^RUT", "半导体指数": "^SOX", "VIX": "^VIX",
     }
     real_indices = data.get("indices") or {}
     tech_rows = []

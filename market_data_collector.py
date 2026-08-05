@@ -7,13 +7,14 @@ import json, sys, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+# 大盘指数——直接用真实点数（而非 ETF 价格）
 ETFS = {
-    "SPY": "S&P 500",
-    "QQQ": "Nasdaq 100",
-    "DIA": "Dow Jones",
-    "IWM": "Russell 2000",
-    "SOXX": "半导体",
-    "VIX": "VIX",
+    "^GSPC": "S&P 500",
+    "^IXIC": "Nasdaq 100",
+    "^DJI": "Dow Jones",
+    "^RUT": "Russell 2000",
+    "^SOX": "半导体指数",
+    "^VIX": "VIX",
 }
 
 SECTOR_ETFS = {
@@ -34,9 +35,7 @@ THEME_ETFS = {
     "SMH": "半导体ETF",
     "SOXX": "半导体指数ETF",
     "IGV": "软件ETF",
-    "CIBR": "网络安全ETF",
     "HACK": "网络安全ETF",
-    "CLOU": "云计算ETF",
     "WCLD": "云计算ETF",
     "BOTZ": "机器人和人工智能ETF",
     "AIQ": "人工智能和大数据ETF",
@@ -47,14 +46,13 @@ THEME_ETFS = {
 }
 
 MACRO_INDICATORS = {
-    "TNX": "10Y收益率",
-    "^TYX": "30Y收益率",  # TYX 需 ^ 前缀（同 ^TNX），否则返回 0
-    "^TNX": "10Y收益率", # alternative
-    "^IRX": "13T国债", # 13-week, maybe not needed
+    "^TNX": "10Y收益率",
+    "^TYX": "30Y收益率",
+    "^IRX": "13T国债",
     "^FVX": "5Y Treasury",
-    # We'll just use TNX, ^TNX, and maybe ^IRX for 13-week, but we can keep simple
     "DX-Y.NYB": "美元指数DXY",
     "GC=F": "黄金",
+    "HG=F": "铜期货",
     "CL=F": "WTI原油",
     "BTC-USD": "比特币",
     "ETH-USD": "以太坊",
@@ -69,49 +67,100 @@ MAGS = {
     "META": "Meta",
     "TSLA": "Tesla",
 }
-def fetch_yahoo(symbol):
-    """Fetch Yahoo Finance quote data with multi-period returns"""
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+def _yahoo_chart(symbol, timeout=15):
+    """尝试主备 Yahoo 子域，返回原始 chart JSON（子域轮询容错）"""
+    hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
+    last_err = None
+    for host in hosts:
+        url = f"https://{host}/v8/finance/chart/{symbol}?interval=1d&range=1mo"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read())
+        except Exception as e:
+            last_err = e
+    raise last_err if last_err else RuntimeError("yahoo unreachable")
+
+# 备用源：Stooq（无 key，CSV 格式）
+import csv, io as _io
+def _stooq_quote(symbol):
+    """Stooq 备用行情，返回 (price, prev_close, closes) 或 None"""
+    code = symbol.replace("=", "").replace("^", "").lower()
+    url = f"https://stooq.com/q/d/l/?s={code}&i=d"
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        result = data["chart"]["result"][0]
-        meta = result["meta"]
-        # Get current price and previous close from meta
-        price = meta.get("regularMarketPrice", 0)
-        prev_close = meta.get("previousClose", 0) or meta.get("chartPreviousClose", 0)
-        # 历史收盘序列（含今日），用于计算近5日 / 近1月收益
-        closes = [c for c in result.get("indicators", {}).get("quote", [{}])[0].get("close", []) if c]
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            rows = list(csv.reader(_io.StringIO(resp.read().decode())))
+        if len(rows) < 3:
+            return None
+        header, data = rows[0], rows[1:]
+        if "Close" not in header:
+            return None
+        ci = header.index("Close")
+        closes = []
+        for r in data[-40:]:
+            try:
+                closes.append(float(r[ci]))
+            except (ValueError, IndexError):
+                continue
         if not closes:
-            closes = [price]
-        # Fallback: use last close from timestamps/indicators if prev_close is 0
-        if prev_close == 0:
-            if len(closes) >= 2:
-                prev_close = closes[-2]
-        change_pct = round((price / prev_close - 1) * 100, 2) if prev_close else "暂无"
+            return None
+        return closes[-1], closes[-2] if len(closes) > 1 else closes[-1], closes
+    except Exception:
+        return None
 
-        # 多周期收益：近5日（5个交易日前的收盘→最新）、近1月（月内首根→最新）
-        change_5d = None
-        change_1m = None
-        if len(closes) >= 6:
-            change_5d = round((closes[-1] / closes[-6] - 1) * 100, 2)
+def _parse_chart(data, symbol):
+    result = data["chart"]["result"][0]
+    meta = result["meta"]
+    price = meta.get("regularMarketPrice", 0)
+    prev_close = meta.get("previousClose", 0) or meta.get("chartPreviousClose", 0)
+    closes = [c for c in result.get("indicators", {}).get("quote", [{}])[0].get("close", []) if c]
+    if not closes:
+        closes = [price]
+    if prev_close == 0:
         if len(closes) >= 2:
-            change_1m = round((closes[-1] / closes[0] - 1) * 100, 2)
+            prev_close = closes[-2]
+    change_pct = round((price / prev_close - 1) * 100, 2) if prev_close else "暂无"
+    change_5d = None
+    change_1m = None
+    if len(closes) >= 6:
+        change_5d = round((closes[-1] / closes[-6] - 1) * 100, 2)
+    if len(closes) >= 2:
+        change_1m = round((closes[-1] / closes[0] - 1) * 100, 2)
+    return {
+        "symbol": symbol,
+        "price": price,
+        "prev_close": prev_close,
+        "change_pct": change_pct,
+        "change_5d": change_5d,
+        "change_1m": change_1m,
+        "high": meta.get("regularMarketDayHigh", 0),
+        "low": meta.get("regularMarketDayLow", 0),
+        "volume": meta.get("regularMarketVolume", 0),
+        "source": "yahoo",
+    }
 
-        return {
-            "symbol": symbol,
-            "price": price,
-            "prev_close": prev_close,
-            "change_pct": change_pct,
-            "change_5d": change_5d,
-            "change_1m": change_1m,
-            "high": meta.get("regularMarketDayHigh", 0),
-            "low": meta.get("regularMarketDayLow", 0),
-            "volume": meta.get("regularMarketVolume", 0),
-        }
-    except Exception as e:
-        return {"symbol": symbol, "error": str(e)}
+def fetch_yahoo(symbol):
+    """Fetch quote with multi-period returns. 主源 Yahoo(多子域轮询)，失败降级 Stooq。"""
+    try:
+        return _parse_chart(_yahoo_chart(symbol), symbol)
+    except Exception:
+        pass
+    try:
+        st = _stooq_quote(symbol)
+        if st:
+            price, prev, closes = st
+            chg = round((price / prev - 1) * 100, 2) if prev else "暂无"
+            c5 = round((closes[-1] / closes[-6] - 1) * 100, 2) if len(closes) >= 6 else None
+            c1m = round((closes[-1] / closes[0] - 1) * 100, 2) if len(closes) >= 2 else None
+            return {
+                "symbol": symbol, "price": price, "prev_close": prev,
+                "change_pct": chg, "change_5d": c5, "change_1m": c1m,
+                "high": "暂无", "low": "暂无", "volume": 0, "source": "stooq",
+            }
+    except Exception:
+        pass
+    return {"symbol": symbol, "error": "all sources failed"}
 
 def fetch_futures():
     """Get ES and NQ futures"""

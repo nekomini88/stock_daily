@@ -359,7 +359,7 @@
             </div>
 
             <!-- 3.3 美元、黄金、原油、比特币 -->
-            <h3>3.3 美元、黄金、原油、加密货币</h3>
+            <h3>3.3 美元、黄金、铜、原油、加密货币</h3>
             <table>
                 <thead>
                     <tr>
@@ -371,7 +371,7 @@
                 </thead>
                 <tbody>
                     {% for name, asset in data.macro.items() %}
-                    {% if name in ["美元指数DXY", "黄金", "WTI原油", "比特币", "以太坊"] %}
+                    {% if name in ["美元指数DXY", "黄金", "铜期货", "WTI原油", "比特币", "以太坊"] %}
                     <tr>
                         <td>{{ name }}</td>
                         <td>{{ asset.price }}</td>
