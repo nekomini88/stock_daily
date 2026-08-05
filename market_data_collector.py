@@ -48,7 +48,7 @@ THEME_ETFS = {
 
 MACRO_INDICATORS = {
     "TNX": "10Y收益率",
-    "TYX": "30Y收益率",
+    "^TYX": "30Y收益率",  # TYX 需 ^ 前缀（同 ^TNX），否则返回 0
     "^TNX": "10Y收益率", # alternative
     "^IRX": "13T国债", # 13-week, maybe not needed
     "^FVX": "5Y Treasury",
@@ -70,8 +70,8 @@ MAGS = {
     "TSLA": "Tesla",
 }
 def fetch_yahoo(symbol):
-    """Fetch Yahoo Finance quote data"""
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
+    """Fetch Yahoo Finance quote data with multi-period returns"""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1mo"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
@@ -81,18 +81,31 @@ def fetch_yahoo(symbol):
         # Get current price and previous close from meta
         price = meta.get("regularMarketPrice", 0)
         prev_close = meta.get("previousClose", 0) or meta.get("chartPreviousClose", 0)
+        # 历史收盘序列（含今日），用于计算近5日 / 近1月收益
+        closes = [c for c in result.get("indicators", {}).get("quote", [{}])[0].get("close", []) if c]
+        if not closes:
+            closes = [price]
         # Fallback: use last close from timestamps/indicators if prev_close is 0
         if prev_close == 0:
-            closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-            closes = [c for c in closes if c]
             if len(closes) >= 2:
                 prev_close = closes[-2]
         change_pct = round((price / prev_close - 1) * 100, 2) if prev_close else "暂无"
+
+        # 多周期收益：近5日（5个交易日前的收盘→最新）、近1月（月内首根→最新）
+        change_5d = None
+        change_1m = None
+        if len(closes) >= 6:
+            change_5d = round((closes[-1] / closes[-6] - 1) * 100, 2)
+        if len(closes) >= 2:
+            change_1m = round((closes[-1] / closes[0] - 1) * 100, 2)
+
         return {
             "symbol": symbol,
             "price": price,
             "prev_close": prev_close,
             "change_pct": change_pct,
+            "change_5d": change_5d,
+            "change_1m": change_1m,
             "high": meta.get("regularMarketDayHigh", 0),
             "low": meta.get("regularMarketDayLow", 0),
             "volume": meta.get("regularMarketVolume", 0),
@@ -119,7 +132,7 @@ def fetch_macro():
     return results
 
 def fetch_group(symbol_map, category="板块"):
-    """批量抓取一组证券，按名称输出 {name: {symbol, change_pct, price, prev_close, high, low, volume}}"""
+    """批量抓取一组证券，按名称输出 {name: {symbol, change_pct, change_5d, change_1m, ...}}"""
     results = {}
     for sym, name in symbol_map.items():
         r = fetch_yahoo(sym)
@@ -127,6 +140,7 @@ def fetch_group(symbol_map, category="板块"):
             item = {"symbol": sym, "name": name,
                     "price": r.get("price"), "prev_close": r.get("prev_close"),
                     "change_pct": r.get("change_pct"),
+                    "change_5d": r.get("change_5d"), "change_1m": r.get("change_1m"),
                     "high": r.get("high"), "low": r.get("low"), "volume": r.get("volume")}
             results[name] = item
     return results

@@ -275,7 +275,7 @@
                             {% if index.change_pct > 0 %}+{% endif %}{{ index.change_pct|round(2) }}%
                         </td>
                         <td>{{ index.low|round(2) }} - {{ index.high|round(2) }}</td>
-                        <td>{{ index.volume|number_format }}</td>
+                        <td>{{ index.volume|compact }}</td>
                         <td>{{ technical_status(name, index) }}</td>
                     </tr>
                     {% endif %}
@@ -353,7 +353,7 @@
             <h3>3.2 Fed 降息预期</h3>
             <div class="card">
                 <h4>🔍 CME FedWatch 数据：</h4>
-                <p><strong>下次FOMC降息概率：</strong>{{ fed_rate_cut_probability }}%</p>
+                <p><strong>下次FOMC降息概率：</strong>{{ fed_rate_cut_probability }}</p>
                 <p><strong>年内预期降息次数：</strong>{{ expected_rate_cuts }}次</p>
                 <p><strong>较前一日变化：</strong>{{ fed_change }}</p>
             </div>

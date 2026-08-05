@@ -47,51 +47,83 @@ def generate_report(args=None):
             return f"{int(value):,}"
         except (ValueError, TypeError):
             return str(value)
+
+    def compact_number(value):
+        """44,246,082 → 44.2M；1,234 → 1.2K"""
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            return "暂无"
+        if v >= 1e9:
+            return f"{v/1e9:.1f}B"
+        elif v >= 1e6:
+            return f"{v/1e6:.1f}M"
+        elif v >= 1e3:
+            return f"{v/1e3:.1f}K"
+        return str(int(v))
     
     def round_value(value, decimals=2):
         if value is None:
-            return "N/A"
+            return "暂无"
         try:
             return round(float(value), decimals)
         except (ValueError, TypeError):
             return str(value)
     
     def technical_status(name, index):
-        if name == "半导体":
-            return "大幅下跌"
-        elif name == "Nasdaq 100":
-            return "小幅下跌"
-        elif name == "Dow Jones":
+        # 基于真实涨跌幅的动态技术状态（不再硬编码）
+        try:
+            chg = float(index.get("change_pct", 0))
+        except (TypeError, ValueError):
+            return "数据缺失"
+        if chg >= 5:
+            return "强势上涨"
+        elif chg >= 1.5:
             return "上涨"
-        elif name == "S&P 500":
-            return "上涨"
-        elif name == "Russell 2000":
+        elif chg >= -1.5:
+            return "震荡"
+        elif chg >= -5:
             return "下跌"
         else:
-            return "正常"
+            return "大幅下跌"
     
     def bond_analysis(name, bond):
-        if name == "10Y收益率":
-            return "长端利率上行，压制科技股估值"
-        elif name == "5Y Treasury":
-            return "中端利率上行，收益率曲线趋平"
+        # 基于真实收益率日变化的动态解读
+        try:
+            chg = float(bond.get("change_pct", 0))
+            price = float(bond.get("price", 0))
+        except (TypeError, ValueError):
+            return "数据缺失"
+        if price <= 0:
+            return "数据缺失"
+        if chg > 0.5:
+            return "收益率上行，压制估值"
+        elif chg < -0.5:
+            return "收益率下行，利好风险资产"
+        elif "10Y" in name:
+            return f"长端利率 {price:.2f}%，窄幅波动"
         else:
-            return "正常"
+            return "窄幅波动"
     
     def asset_analysis(name, asset):
-        if name == "美元指数DXY":
-            return "美元走弱利好风险资产"
-        elif name == "黄金":
-            return "避险情绪升温"
-        elif name == "WTI原油":
-            return "油价震荡"
-        elif name == "比特币":
-            return "加密货币风险偏好回升"
-        else:
-            return "正常"
+        # 基于真实资产涨跌的动态解读
+        try:
+            chg = float(asset.get("change_pct", 0))
+        except (TypeError, ValueError):
+            return "数据缺失"
+        if chg >= 3:
+            return f"强势上涨 {chg:+.1f}%"
+        elif chg <= -3:
+            return f"明显下跌 {chg:+.1f}%"
+        elif chg > 0:
+            return f"小幅上涨 {chg:+.1f}%"
+        elif chg < 0:
+            return f"小幅下跌 {chg:+.1f}%"
+        return "持平"
     
     # 注册过滤器
     env.filters['number_format'] = number_format
+    env.filters['compact'] = compact_number
     env.filters['round'] = round_value
     env.globals['technical_status'] = technical_status
     env.globals['bond_analysis'] = bond_analysis
@@ -306,6 +338,50 @@ def generate_report(args=None):
         adapted = _adapt_group(real_themes, {"kind": "theme"})
         if adapted:
             report_data["themes_performance"] = adapted
+
+    # 15a. 真实技术面表覆盖：用真实指数价格构造（price/当日涨跌/日高日低真实），MA/RSI/MACD 标注暂无
+    #     移除原先硬编码的假均线/RSI/MACD（如 SPY 744.78 与真实 769.79 矛盾）
+    _symbol_alias = {
+        "S&P 500": "SPY", "Nasdaq 100": "QQQ", "Dow Jones": "DIA",
+        "Russell 2000": "IWM", "半导体": "SOXX", "VIX": "VIX",
+    }
+    real_indices = data.get("indices") or {}
+    tech_rows = []
+    for idx_name, idx in real_indices.items():
+        if not isinstance(idx, dict) or "error" in idx:
+            continue
+        sym = idx.get("symbol") or _symbol_alias.get(idx_name, idx_name)
+        price = idx.get("price")
+        if price is None or price == 0:
+            continue
+        lo, hi = idx.get("low", 0), idx.get("high", 0)
+        tech_rows.append({
+            "symbol": sym,
+            "price": price,
+            "change_pct": idx.get("change_pct"),
+            "ma20": None, "ma50": None, "ma100": None, "ma200": None,
+            "rsi": "暂无", "macd": "暂无",
+            "support": f"{lo:.2f}" if lo else "暂无",
+            "resistance": f"{hi:.2f}" if hi else "暂无",
+        })
+    if tech_rows:
+        report_data["technical_analysis"] = tech_rows
+
+    # 14b. 市场宽度表去假数字：采集器无真实涨跌家数源，展示"暂无实时数据"，解读用 LLM breadth 结论
+    for _f in ["nyse_advance", "nyse_decline", "nyse_ratio",
+               "nasdaq_advance", "nasdaq_decline", "nasdaq_ratio",
+               "nyda_new_highs", "nyda_new_lows", "nasdaq_new_highs", "nasdaq_new_lows"]:
+        report_data[_f] = "暂无"
+    # 无数据支撑的假解读一并诚实化（下行数/涨跌比/新高新低均无实时数据）
+    for _f in ["breadth_decline_analysis", "breadth_ratio_analysis",
+               "new_highs_analysis", "new_lows_analysis",
+               "ma_20_sp500_analysis", "ma_20_qqq_analysis"]:
+        report_data[_f] = "暂无实时数据，以上市公司财报与盘面判断为主"
+
+    # 14c. 均线参与度：无真实数据，统一标注暂无
+    for _f in ["ma_20_sp500", "ma_50_sp500", "ma_100_sp500", "ma_200_sp500",
+               "ma_20_qqq", "ma_50_qqq", "ma_100_qqq", "ma_200_qqq"]:
+        report_data[_f] = "暂无"
 
     # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
     llm_file = Path(__file__).resolve().parent / "llm_data" / f"market_llm_{_today}.json"
