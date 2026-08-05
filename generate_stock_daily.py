@@ -270,6 +270,43 @@ def generate_report(args=None):
             "市场宽度改善信号",
         ])
 
+    # 由数据文件推导报告日期（供 LLM 结论文件定位）
+    _today = data_file.stem.replace("market_data_", "") if "market_data_" in data_file.stem else datetime.date.today().strftime("%Y-%m-%d")
+
+    # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
+    llm_file = Path(__file__).resolve().parent / "llm_data" / f"market_llm_{_today}.json"
+    if llm_file.exists():
+        try:
+            llm = json.loads(llm_file.read_text(encoding="utf-8"))
+            if isinstance(llm, dict) and llm:
+                # 15 章结论 → 模板字段映射（表格数值仍来自真实数据，文字用 LLM）
+                _MAP = {
+                    "summary": "market_summary",
+                    "market_overview": "market_driver",
+                    "intraday": "core_reason",
+                    "macro": "bond_analysis_summary",
+                    "sectors": "sector_analysis",
+                    "themes": "theme_analysis",
+                    "breadth": "breadth_advance_analysis",
+                    "technical": "technical_key_points",
+                    "stocks": "main_focus",
+                    "earnings": "earnings_risk_status",
+                    "institutions": "market_sentiment",
+                    "rotation": "main_line_analysis",
+                    "watchlist": "economic_data_observation",
+                    "risks": "main_risk",
+                    "conclusion": "market_conclusion",
+                }
+                applied = 0
+                for llm_key, field in _MAP.items():
+                    val = llm.get(llm_key)
+                    if isinstance(val, str) and val.strip():
+                        report_data[field] = val.strip()
+                        applied += 1
+                print(f"🤖 LLM 结论已覆盖 {applied}/15 章")
+        except Exception as e:
+            print(f"⚠️  LLM 结论加载失败，继续使用原有数据: {e}", file=sys.stderr)
+
     # 渲染模板
     today = data_file.stem.replace("market_data_", "") if "market_data_" in data_file.stem else datetime.date.today().strftime("%Y-%m-%d")
     generated_at = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")

@@ -18,6 +18,10 @@ echo "=== 开始生成 ${today} 美股收盘日报 ==="
 # 1. 生成实时数据
 python3 market_data_collector.py
 
+# 1.5 生成 LLM 15 条结论（失败不影响主流程，生成脚本内部有兜底）
+echo "=== 生成 LLM 15 条结论 ==="
+python3 generate_llm_conclusions.py "${today}" || echo "⚠️ LLM 结论生成失败，将使用原有数据"
+
 # 2. 生成 HTML 报告（支持动态 data_file / today）
 python3 generate_stock_daily.py --today "${today}"
 
