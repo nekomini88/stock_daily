@@ -1,14 +1,16 @@
 # stock_daily — 美股收盘日报生成与投递系统
 
-专业的美股市场日报工具：每日自动采集 **Yahoo Finance 真实行情**，由 **LLM 基于当日真实数据生成 15 章专业分析结论**，渲染为 HTML 报告，并同时投递到 **Telegram 频道** 与 **Email**。
+专业的美股市场日报工具：每日自动采集 **真实行情**（指数点数/七巨头/11板块/主题/美债/美元/黄金/原油/铜/加密币），由 **LLM 基于当日真实数据生成 15 章专业分析结论**，渲染为 HTML 报告，并同时投递到 **Telegram 频道** 与 **Email**。
+
+数据源支持多源容错：主源 Yahoo Finance（多子域轮询），失败自动降级 Stooq；指数使用真实点数（如标普500 7723.55，而非 ETF 价）。
 
 ## 🏗 架构
 
 ```text
-Yahoo Finance 行情采集
+行情采集（Yahoo 主 / Stooq 备用）
       │  market_data_collector.py
       ▼
-daily_news/market_data_YYYY-MM-DD.json   ← 真实行情快照（指数/七巨头/板块/主题/期货/宏观）
+daily_news/market_data_YYYY-MM-DD.json   ← 真实行情快照（指数点数/七巨头/板块/主题/期货/宏观）
       │
       ├─► generate_llm_conclusions.py ──► llm_data/market_llm_YYYY-MM-DD.json（15 章结论）
       │        OpenCode Zen (longcat-2.0-free)
@@ -28,7 +30,7 @@ files/YYYY-MM-DD/美股收盘日报_YYYY-MM-DD.html
 ```
 stock_daily/
 ├── stock_daily.sh                  # 主入口：采集 → LLM 结论 → 生成 HTML → 发 TG → 发邮件 → 红线审查
-├── market_data_collector.py        # Yahoo Finance 行情采集（指数/七巨头/11板块/主题/期货/宏观）
+├── market_data_collector.py        # 行情采集（Yahoo多子域+Stooq降级；指数点数/板块/主题/债券/铜/加密币）
 ├── generate_llm_conclusions.py     # LLM 生成 15 章结论（OpenCode Zen，基于真实数据）
 ├── generate_stock_daily.py         # 读取 JSON + LLM 结论，渲染 HTML 报告
 ├── final_conclusion.py             # 第15章规则兜底（LLM 失败时使用）
@@ -127,6 +129,9 @@ docker compose up -d
 
 ## 📌 关键实现细节
 
+- **数据源容错**：`_yahoo_chart()` 轮询 query1/query2 子域，失败降级 `_stooq_quote()`（Stooq CSV、无 key），结果标记 `source` 字段
+- **指数用真实点数**：`^GSPC`(标普7723) `^IXIC` `^DJI` `^RUT` `^SOX`(半导体) `^VIX`，非 ETF 价格
+- **含义列全真实**：债市/资产含义、板块跑赢/驱动、主题解读均按真实涨跌动态生成，无占位符；无数据源字段诚实标"暂无"（禁止编造）
 - **TG 发送**：`send_tg_report.py` 使用 hermes CLI 绝对路径（`$HOME/.local/bin/hermes`），适配 cron 最小环境
-- **缓存**：静态资源带版本参数（如 `?v=1.1.2`）避免浏览器/CF 缓存旧版
-- **兜底链**：LLM 失败 → `final_conclusion.py` 规则结论 → 模板硬编码默认值，保证报告永不中断
+- **缓存**：静态资源带版本参数避免浏览器/CF 缓存旧版
+- **兜底链**：LLM 失败 → `final_conclusion.py` 规则结论 → 模板默认值，保证报告永不中断
