@@ -209,6 +209,8 @@ def _parse_json(content: str) -> dict:
                 return json.loads(m.group(0))
             except Exception:
                 pass
+    # LLM 输出无法解析为 JSON → 空结论 (记录原文便于排障)
+    print(f"⚠️ LLM 结论输出无法解析为 JSON, 返回空: {content[:120]}", file=sys.stderr)
     return {}
 
 

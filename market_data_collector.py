@@ -144,8 +144,10 @@ def fetch_yahoo(symbol):
     """Fetch quote with multi-period returns. 主源 Yahoo(多子域轮询)，失败降级 Stooq。"""
     try:
         return _parse_chart(_yahoo_chart(symbol), symbol)
-    except Exception:
-        pass
+    except Exception as e:
+        # 降级: Yahoo 失败 → Stooq (记录原因, 不吞掉)
+        import sys
+        print(f"⚠️ {symbol} Yahoo 源失败, 降级 Stooq: {e}", file=sys.stderr)
     try:
         st = _stooq_quote(symbol)
         if st:
@@ -158,8 +160,10 @@ def fetch_yahoo(symbol):
                 "change_pct": chg, "change_5d": c5, "change_1m": c1m,
                 "high": "暂无", "low": "暂无", "volume": 0, "source": "stooq",
             }
-    except Exception:
-        pass
+    except Exception as e:
+        # 降级失败: Stooq 也挂了 → 返回 error (记录原因)
+        import sys
+        print(f"⚠️ {symbol} Stooq 源也失败: {e}", file=sys.stderr)
     return {"symbol": symbol, "error": "all sources failed"}
 
 def fetch_futures():
