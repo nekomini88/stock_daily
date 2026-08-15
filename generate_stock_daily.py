@@ -20,6 +20,178 @@ def data_file_path(args):
     return Path(f"/root/stock_daily/daily_news/market_data_{today}.json")
 
 
+def number_format(value):
+    """千分位格式化：1234567 → 1,234,567；None → N/A"""
+    if value is None:
+        return "N/A"
+    try:
+        return f"{int(value):,}"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def compact_number(value):
+    """大数缩写：44,246,082 → 44.2M；1,234 → 1.2K"""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "暂无"
+    if v >= 1e9:
+        return f"{v/1e9:.1f}B"
+    elif v >= 1e6:
+        return f"{v/1e6:.1f}M"
+    elif v >= 1e3:
+        return f"{v/1e3:.1f}K"
+    return str(int(v))
+
+
+def round_value(value, decimals=2):
+    """数值保留 decimals 位小数；None → 暂无"""
+    if value is None:
+        return "暂无"
+    try:
+        return round(float(value), decimals)
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def technical_status(name, index):
+    """基于真实涨跌幅的动态技术状态（不再硬编码）"""
+    try:
+        chg = float(index.get("change_pct", 0))
+    except (TypeError, ValueError):
+        return "数据缺失"
+    if chg >= 5:
+        return "强势上涨"
+    elif chg >= 1.5:
+        return "上涨"
+    elif chg >= -1.5:
+        return "震荡"
+    elif chg >= -5:
+        return "下跌"
+    else:
+        return "大幅下跌"
+
+
+def bond_analysis(name, bond):
+    """基于真实收益率日变化的动态解读"""
+    try:
+        chg = float(bond.get("change_pct", 0))
+        price = float(bond.get("price", 0))
+    except (TypeError, ValueError):
+        return "数据缺失"
+    if price <= 0:
+        return "数据缺失"
+    if chg > 0.5:
+        return "收益率上行，压制估值"
+    elif chg < -0.5:
+        return "收益率下行，利好风险资产"
+    elif "10Y" in name:
+        return f"长端利率 {price:.2f}%，窄幅波动"
+    else:
+        return "窄幅波动"
+
+
+def asset_analysis(name, asset):
+    """基于真实资产涨跌的动态解读"""
+    try:
+        chg = float(asset.get("change_pct", 0))
+    except (TypeError, ValueError):
+        return "数据缺失"
+    if chg >= 3:
+        return f"强势上涨 {chg:+.1f}%"
+    elif chg <= -3:
+        return f"明显下跌 {chg:+.1f}%"
+    elif chg > 0:
+        return f"小幅上涨 {chg:+.1f}%"
+    elif chg < 0:
+        return f"小幅下跌 {chg:+.1f}%"
+    return "持平"
+
+
+# 板块驱动解读基础文案（基于涨跌幅与板块属性的轻量动态解读，不含编造突发新闻）
+_SECTOR_BASE = {
+    "信息技术": "科技权重主导，AI/半导体景气度高企",
+    "通信服务": "平台与广告收入驱动",
+    "可选消费": "消费与旅游需求波动",
+    "金融": "利率曲线与信贷环境敏感",
+    "工业": "制造业景气与资本开支",
+    "医疗保健": "防御属性，政策/研发周期主导",
+    "必需消费": "必需需求稳定，防御属性",
+    "能源": "油价与能源价格联动",
+    "公用事业": "防御性，利率敏感",
+    "材料": "周期品价格与地产需求",
+    "房地产": "利率与 REITs 周期",
+}
+
+
+def _sector_driver(name, chg):
+    """板块驱动解读：按涨跌幅附加强弱文案"""
+    base = _SECTOR_BASE.get(name, "板块基本面")
+    try:
+        c = float(chg)
+    except (TypeError, ValueError):
+        return base
+    if c >= 2:
+        return f"{base}，放量大涨"
+    elif c <= -2:
+        return f"{base}，承压回落"
+    return f"{base}，窄幅整理"
+
+
+def _vs_sp500(chg, sp_chg):
+    """板块相对标普涨跌判断：差 ≥0.5 跑赢，≤-0.5 跑输，否则持平"""
+    try:
+        c = float(chg); s = float(sp_chg)
+    except (TypeError, ValueError):
+        return "—"
+    diff = c - s
+    if diff >= 0.5:
+        return "跑赢"
+    elif diff <= -0.5:
+        return "跑输"
+    return "持平"
+
+
+def _theme_analysis(name, chg):
+    """主题涨跌动态解读"""
+    try:
+        c = float(chg)
+    except (TypeError, ValueError):
+        return "主题表现待观察"
+    if c >= 3:
+        return f"主题强势，当日+{c:.1f}%"
+    elif c <= -3:
+        return f"主题回调，当日{c:+.1f}%"
+    elif c > 0:
+        return f"温和走强，当日+{c:.1f}%"
+    elif c < 0:
+        return f"小幅走弱，当日{c:+.1f}%"
+    return "基本持平"
+
+
+def _adapt_group(group_list, extra=None, sp500_chg=None):
+    """把采集器输出（name/symbol/change_pct）适配为模板字段（name/etf/change/change_5d/change_1m）。"""
+    out = []
+    for item in group_list or []:
+        if not isinstance(item, dict):
+            continue
+        row = {
+            "name": item.get("name", ""),
+            "etf": item.get("symbol", ""),
+            "change": item.get("change_pct"),
+            "change_5d": item.get("change_5d"),
+            "change_1m": item.get("change_1m"),
+        }
+        if isinstance(extra, dict) and extra.get("kind") == "sector":
+            row["vs_sp500"] = _vs_sp500(item.get("change_pct"), sp500_chg)
+            row["driver"] = _sector_driver(item.get("name"), item.get("change_pct"))
+        if isinstance(extra, dict) and extra.get("kind") == "theme":
+            row["analysis"] = _theme_analysis(item.get("name"), item.get("change_pct"))
+        out.append(row)
+    return out
+
+
 def generate_report(args=None):
     """生成美股日报报告"""
     args = args or parse_args()
@@ -38,88 +210,6 @@ def generate_report(args=None):
         loader=FileSystemLoader(Path(__file__).parent / "templates"),
         autoescape=True
     )
-    
-    # 添加自定义过滤器
-    def number_format(value):
-        if value is None:
-            return "N/A"
-        try:
-            return f"{int(value):,}"
-        except (ValueError, TypeError):
-            return str(value)
-
-    def compact_number(value):
-        """44,246,082 → 44.2M；1,234 → 1.2K"""
-        try:
-            v = float(value)
-        except (TypeError, ValueError):
-            return "暂无"
-        if v >= 1e9:
-            return f"{v/1e9:.1f}B"
-        elif v >= 1e6:
-            return f"{v/1e6:.1f}M"
-        elif v >= 1e3:
-            return f"{v/1e3:.1f}K"
-        return str(int(v))
-    
-    def round_value(value, decimals=2):
-        if value is None:
-            return "暂无"
-        try:
-            return round(float(value), decimals)
-        except (ValueError, TypeError):
-            return str(value)
-    
-    def technical_status(name, index):
-        # 基于真实涨跌幅的动态技术状态（不再硬编码）
-        try:
-            chg = float(index.get("change_pct", 0))
-        except (TypeError, ValueError):
-            return "数据缺失"
-        if chg >= 5:
-            return "强势上涨"
-        elif chg >= 1.5:
-            return "上涨"
-        elif chg >= -1.5:
-            return "震荡"
-        elif chg >= -5:
-            return "下跌"
-        else:
-            return "大幅下跌"
-    
-    def bond_analysis(name, bond):
-        # 基于真实收益率日变化的动态解读
-        try:
-            chg = float(bond.get("change_pct", 0))
-            price = float(bond.get("price", 0))
-        except (TypeError, ValueError):
-            return "数据缺失"
-        if price <= 0:
-            return "数据缺失"
-        if chg > 0.5:
-            return "收益率上行，压制估值"
-        elif chg < -0.5:
-            return "收益率下行，利好风险资产"
-        elif "10Y" in name:
-            return f"长端利率 {price:.2f}%，窄幅波动"
-        else:
-            return "窄幅波动"
-    
-    def asset_analysis(name, asset):
-        # 基于真实资产涨跌的动态解读
-        try:
-            chg = float(asset.get("change_pct", 0))
-        except (TypeError, ValueError):
-            return "数据缺失"
-        if chg >= 3:
-            return f"强势上涨 {chg:+.1f}%"
-        elif chg <= -3:
-            return f"明显下跌 {chg:+.1f}%"
-        elif chg > 0:
-            return f"小幅上涨 {chg:+.1f}%"
-        elif chg < 0:
-            return f"小幅下跌 {chg:+.1f}%"
-        return "持平"
     
     # 注册过滤器
     env.filters['number_format'] = number_format
@@ -314,83 +404,9 @@ def generate_report(args=None):
     except (TypeError, ValueError):
         sp500_chg = None
 
-    # 板块驱动（基于涨跌幅与板块属性的轻量动态解读，不含编造突发新闻）
-    _SECTOR_BASE = {
-        "信息技术": "科技权重主导，AI/半导体景气度高企",
-        "通信服务": "平台与广告收入驱动",
-        "可选消费": "消费与旅游需求波动",
-        "金融": "利率曲线与信贷环境敏感",
-        "工业": "制造业景气与资本开支",
-        "医疗保健": "防御属性，政策/研发周期主导",
-        "必需消费": "必需需求稳定，防御属性",
-        "能源": "油价与能源价格联动",
-        "公用事业": "防御性，利率敏感",
-        "材料": "周期品价格与地产需求",
-        "房地产": "利率与 REITs 周期",
-    }
-    def _sector_driver(name, chg):
-        base = _SECTOR_BASE.get(name, "板块基本面")
-        try:
-            c = float(chg)
-        except (TypeError, ValueError):
-            return base
-        if c >= 2:
-            return f"{base}，放量大涨"
-        elif c <= -2:
-            return f"{base}，承压回落"
-        return f"{base}，窄幅整理"
-
-    def _vs_sp500(chg, sp_chg):
-        try:
-            c = float(chg); s = float(sp_chg)
-        except (TypeError, ValueError):
-            return "—"
-        diff = c - s
-        if diff >= 0.5:
-            return "跑赢"
-        elif diff <= -0.5:
-            return "跑输"
-        return "持平"
-
-    def _theme_analysis(name, chg):
-        try:
-            c = float(chg)
-        except (TypeError, ValueError):
-            return "主题表现待观察"
-        if c >= 3:
-            return f"主题强势，当日+{c:.1f}%"
-        elif c <= -3:
-            return f"主题回调，当日{c:+.1f}%"
-        elif c > 0:
-            return f"温和走强，当日+{c:.1f}%"
-        elif c < 0:
-            return f"小幅走弱，当日{c:+.1f}%"
-        return "基本持平"
-
-    def _adapt_group(group_list, extra=None):
-        """把采集器输出（name/symbol/change_pct）适配为模板字段（name/etf/change/change_5d/change_1m）。"""
-        out = []
-        for item in group_list or []:
-            if not isinstance(item, dict):
-                continue
-            row = {
-                "name": item.get("name", ""),
-                "etf": item.get("symbol", ""),
-                "change": item.get("change_pct"),
-                "change_5d": item.get("change_5d"),
-                "change_1m": item.get("change_1m"),
-            }
-            if isinstance(extra, dict) and extra.get("kind") == "sector":
-                row["vs_sp500"] = _vs_sp500(item.get("change_pct"), sp500_chg)
-                row["driver"] = _sector_driver(item.get("name"), item.get("change_pct"))
-            if isinstance(extra, dict) and extra.get("kind") == "theme":
-                row["analysis"] = _theme_analysis(item.get("name"), item.get("change_pct"))
-            out.append(row)
-        return out
-
     real_sectors = data.get("sectors_performance")
     if isinstance(real_sectors, list) and real_sectors:
-        adapted = _adapt_group(real_sectors, {"kind": "sector"})
+        adapted = _adapt_group(real_sectors, {"kind": "sector"}, sp500_chg)
         if adapted:
             report_data["sectors_performance"] = adapted
 
