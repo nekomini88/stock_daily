@@ -135,3 +135,11 @@ docker compose up -d
 - **TG 发送**：`send_tg_report.py` 使用 hermes CLI 绝对路径（`$HOME/.local/bin/hermes`），适配 cron 最小环境
 - **缓存**：静态资源带版本参数避免浏览器/CF 缓存旧版
 - **兜底链**：LLM 失败 → `final_conclusion.py` 规则结论 → 模板默认值，保证报告永不中断
+
+## 测试
+
+```bash
+python3 -m pytest tests/ -v   # 77 个用例 (chart解析/采集降级/报告格式化/涨跌状态边界)
+```
+
+覆盖：Yahoo chart 解析、Stooq 降级、报告模板纯函数（number_format/technical_status/板块分析）、数据文件缺失兜底。
