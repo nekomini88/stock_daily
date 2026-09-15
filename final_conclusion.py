@@ -24,6 +24,15 @@ def _fmt(val: Optional[float]) -> str:
     return f"{val:+.2f}%"
 
 
+def _chg(item: Any) -> Optional[float]:
+    """读涨跌幅：采集器原始数据用 change_pct，报告适配层的板块/主题用 change。"""
+    if not isinstance(item, dict):
+        return None
+    if item.get("change_pct") is not None:
+        return _pct(item.get("change_pct"))
+    return _pct(item.get("change"))
+
+
 def _safe(items: Any, idx: int = 0) -> Any:
     if not items or not isinstance(items, list):
         return None
@@ -160,9 +169,9 @@ def _build_signals(sp_chg, soxx_chg, ru_chg, top_sector, best_mag7,
     elif pct2(ru_chg or 0) < -1.0:
         add_signal("小盘股显著走弱，避险情绪升温")
     if themes_performance:
-        top_theme = _safe(sorted(themes_performance, key=lambda x: _pct(x.get("change")) or 0, reverse=True), 0)
+        top_theme = _safe(sorted(themes_performance, key=lambda x: _chg(x) or 0, reverse=True), 0)
         if top_theme:
-            add_signal(f"最强主题/风格：{top_theme.get('name', '主题')} {_fmt(_pct(top_theme.get('change')))}")
+            add_signal(f"最强主题/风格：{top_theme.get('name', '主题')} {_fmt(_chg(top_theme))}")
     while len(signals) < 5:
         signals.append("暂无其他强信号，关注次日宏观催化与财报日程")
     # deduplicate while preserving order
@@ -199,7 +208,7 @@ def analyze_session(data: Dict[str, Any]) -> Dict[str, Any]:
     qq = indices.get(qq_name) or indices.get("QQQ") or {}
     dw = indices.get(alias.get("^DJI", "Dow Jones")) or indices.get("DIA") or {}
     ru = indices.get(alias.get("^RUT", "Russell 2000")) or indices.get("IWM") or {}
-    soxx = indices.get("半导体") or indices.get("SOXX") or {}
+    soxx = indices.get("半导体指数") or indices.get("半导体") or indices.get("SOXX") or {}
     bond = macro.get("10Y收益率") or macro.get("^TNX") or {}
     dxy = macro.get("美元指数DXY") or macro.get("DX-Y.NYB") or {}
     gold = macro.get("黄金") or macro.get("GC=F") or {}
@@ -210,8 +219,8 @@ def analyze_session(data: Dict[str, Any]) -> Dict[str, Any]:
     ru_chg = _pct(ru.get("change_pct"))
     soxx_chg = _pct(soxx.get("change_pct"))
 
-    rising_sectors = [s for s in sectors_performance if _pct(s.get("change")) and _pct(s.get("change")) > 0]
-    falling_sectors = [s for s in sectors_performance if _pct(s.get("change")) and _pct(s.get("change")) < 0]
+    rising_sectors = [s for s in sectors_performance if (_chg(s) or 0) > 0]
+    falling_sectors = [s for s in sectors_performance if (_chg(s) or 0) < 0]
     top_sector = _safe(rising_sectors, 0)
     worst_sector = _safe(falling_sectors, 0)
 
@@ -232,7 +241,7 @@ def analyze_session(data: Dict[str, Any]) -> Dict[str, Any]:
 
     def sector_info(s):
         name = s.get("name", "板块") if isinstance(s, dict) else "板块"
-        chg = _pct(s.get("change"))
+        chg = _chg(s)
         return f"{name}({_fmt(chg)})" if chg is not None else name
 
     # phase

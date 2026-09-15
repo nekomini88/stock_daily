@@ -13,7 +13,7 @@
 daily_news/market_data_YYYY-MM-DD.json   ← 真实行情快照（指数点数/七巨头/板块/主题/期货/宏观）
       │
       ├─► generate_llm_conclusions.py ──► llm_data/market_llm_YYYY-MM-DD.json（15 章结论）
-      │        OpenCode Zen (longcat-2.0-free)
+      │        LLM provider 链：z.ai glm-4.5-air（免费额度）→ glm-4.5-flash → OpenRouter（备用）
       │
       ▼
 generate_stock_daily.py  (Jinja2 模板渲染，LLM 结论覆盖文字、真实数据填表格)
@@ -21,7 +21,7 @@ generate_stock_daily.py  (Jinja2 模板渲染，LLM 结论覆盖文字、真实�
       ▼
 files/YYYY-MM-DD/美股收盘日报_YYYY-MM-DD.html
       │
-      ├─► send_tg_report.py      ──► Telegram 频道（等宽文本自动分段）
+      ├─► send_tg_report.py      ──► Telegram 频道（等宽文本自动分段；hermes send 被 cron 去重时改走 Bot API 直发）
       └─► send_report_email.py   ──► Email（HTML 邮件）
 ```
 
@@ -107,10 +107,18 @@ Hermes cron job（`fd5ef5bf3bff`，工作日 08:00）：
 
 ## 🤖 LLM 接入
 
-- **Endpoint**：`https://opencode.ai/zen/v1/chat/completions`
-- **Model**：`longcat-2.0-free`
-- **Key**：`OPENCODE_ZEN_API_KEY`（`/root/.hermes/.env`）
+按顺序尝试，前一个成功（15 章 JSON 齐全）即停止：
+
+| 顺序 | Provider | Model | Key |
+|------|----------|-------|-----|
+| 1 | z.ai（智谱） | `glm-4.5-air`（免费额度） | `GLM_API_KEY` |
+| 2 | z.ai（智谱） | `glm-4.5-flash` | `GLM_API_KEY` |
+| 3 | OpenRouter | `google/gemini-2.5-flash` | `OPENROUTER_API_KEY` |
+| 4 | OpenRouter | `deepseek/deepseek-chat-v3.1` | `OPENROUTER_API_KEY` |
+
+- ⚠️ OpenCode Zen 的 `*-free` 档现已**只允许在 OpenCode 客户端内使用**（返回 `MissingSessionID`），`longcat-2.0-free` 亦已下线，故不再使用
 - ⚠️ **必须用 `requests`**：`urllib` 会被 Cloudflare 拦截（HTTP 403 error code 1010）
+- 覆盖率低于 12/15 章视为失败并尝试下一个 provider，全部失败时报告改走"真实数据 + 诚实占位"（绝不编造）
 
 ## 🔒 隐私
 
@@ -130,16 +138,18 @@ docker compose up -d
 ## 📌 关键实现细节
 
 - **数据源容错**：`_yahoo_chart()` 轮询 query1/query2 子域，失败降级 `_stooq_quote()`（Stooq CSV、无 key），结果标记 `source` 字段
+- **昨收基准**：Yahoo 已不返回 `meta.previousClose`，而 `meta.chartPreviousClose` 是 range 区间**起始日之前**的收盘价（≈1 个月前）。`_prev_close()` 改用日线序列中"与报价同一交易日的上一根"，并对日线滞后一个交易日的标的（个股常见）自动取最后一根，避免把月涨跌当成日内涨跌
 - **指数用真实点数**：`^GSPC`(标普7723) `^IXIC` `^DJI` `^RUT` `^SOX`(半导体) `^VIX`，非 ETF 价格
 - **含义列全真实**：债市/资产含义、板块跑赢/驱动、主题解读均按真实涨跌动态生成，无占位符；无数据源字段诚实标"暂无"（禁止编造）
-- **TG 发送**：`send_tg_report.py` 使用 hermes CLI 绝对路径（`$HOME/.local/bin/hermes`），适配 cron 最小环境
+- **表格无编造数据**：七巨头/AI硬件/重点关注股/板块排名/资金流向/风险等级均由当日真实行情推导；财报日历、机构观点、Fed 降息概率等无数据源章节明确标注"暂无（采集器未接入该数据源）"
+- **TG 发送**：`send_tg_report.py` 使用 hermes CLI 绝对路径（`$HOME/.local/bin/hermes`），适配 cron 最小环境；hermes send 在 cron 中若与自动投递目标相同会返回 `skipped`，此时自动改走 Telegram Bot API 直发（真实 message_id 写入 `files/<date>/tg_send_log.jsonl`）
 - **缓存**：静态资源带版本参数避免浏览器/CF 缓存旧版
-- **兜底链**：LLM 失败 → `final_conclusion.py` 规则结论 → 模板默认值，保证报告永不中断
+- **兜底链**：LLM 失败 → 真实数据推导 → `final_conclusion.py` 规则结论 → 诚实占位，保证报告永不中断也永不编造
 
 ## 测试
 
 ```bash
-python3 -m pytest tests/ -v   # 77 个用例 (chart解析/采集降级/报告格式化/涨跌状态边界)
+python3 -m pytest tests/ -q   # 128 个用例
 ```
 
-覆盖：Yahoo chart 解析、Stooq 降级、报告模板纯函数（number_format/technical_status/板块分析）、数据文件缺失兜底。
+覆盖：Yahoo chart 解析（含昨收基准/日线滞后两交易日场景）、Stooq 降级、报告模板纯函数（number_format/technical_status/板块分析/阶段涨跌）、表格真实数据适配器、无源章节占位、final_conclusion 字段兼容、TG 标题日期与发送降级链。

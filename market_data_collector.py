@@ -67,6 +67,15 @@ MAGS = {
     "META": "Meta",
     "TSLA": "Tesla",
 }
+
+# AI 硬件 / 半导体重点个股（8.2 章节真实数据源）
+AI_HARDWARE = {
+    "AMD": "AMD",
+    "AVGO": "博通",
+    "MRVL": "Marvell",
+    "TSM": "台积电",
+    "MU": "美光",
+}
 def _yahoo_chart(symbol, timeout=15):
     """尝试主备 Yahoo 子域，返回原始 chart JSON（子域轮询容错）"""
     hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
@@ -109,24 +118,63 @@ def _stooq_quote(symbol):
     except Exception:
         return None
 
+def _series_is_current(meta, timestamps, closes):
+    """日线序列最后一根是否就是当前报价所在的交易日。
+
+    Yahoo 对不少标的的日线会滞后一个交易日（最后一根是上一交易日收盘，而
+    regularMarketPrice 已是最新收盘）。用报价时间戳与最后一根日线时间戳对比
+    判断；缺时间戳时退化为"最后一根收盘价是否≈现价"。
+    """
+    quote_ts = meta.get("regularMarketTime")
+    if quote_ts and timestamps:
+        try:
+            quote_day = datetime.fromtimestamp(quote_ts, timezone.utc).date()
+            last_day = datetime.fromtimestamp(timestamps[-1], timezone.utc).date()
+            return quote_day == last_day
+        except (TypeError, ValueError, OSError):
+            pass
+    price = meta.get("regularMarketPrice")
+    if price and closes[-1]:
+        return abs(price / closes[-1] - 1) <= 0.001
+    return True
+
+
+def _prev_close(meta, closes, timestamps=None):
+    """上一交易日收盘价。
+
+    Yahoo 已不返回 meta.previousClose，而 meta.chartPreviousClose 是 range 区间
+    起始日**之前**的收盘价（range=1mo 时约等于一个月前）。直接拿它当"昨收"会把
+    月涨跌当成日涨跌（WTI/BTC 每天"涨 20%+"就是这么来的）。故：
+    显式 previousClose > 日线序列中与报价同一交易日的上一根 > 最后一根 > chartPreviousClose。
+    """
+    explicit = meta.get("previousClose")
+    if explicit:
+        return explicit
+    if len(closes) < 2:
+        return closes[-1] if closes else (meta.get("chartPreviousClose", 0) or 0)
+    return closes[-2] if _series_is_current(meta, timestamps, closes) else closes[-1]
+
+
 def _parse_chart(data, symbol):
     result = data["chart"]["result"][0]
     meta = result["meta"]
     price = meta.get("regularMarketPrice", 0)
-    prev_close = meta.get("previousClose", 0) or meta.get("chartPreviousClose", 0)
     closes = [c for c in result.get("indicators", {}).get("quote", [{}])[0].get("close", []) if c]
+    timestamps = result.get("timestamp") or []
+    if len(timestamps) != len(closes):
+        timestamps = None  # 序列被过滤过，无法对齐时间戳
     if not closes:
         closes = [price]
-    if prev_close == 0:
-        if len(closes) >= 2:
-            prev_close = closes[-2]
+    prev_close = _prev_close(meta, closes, timestamps)
     change_pct = round((price / prev_close - 1) * 100, 2) if prev_close else "暂无"
+    # 区间涨跌以最新报价为终点（日线滞后时 closes[-1] 不是最新价）
+    last = price or closes[-1]
     change_5d = None
     change_1m = None
     if len(closes) >= 6:
-        change_5d = round((closes[-1] / closes[-6] - 1) * 100, 2)
+        change_5d = round((last / closes[-6] - 1) * 100, 2)
     if len(closes) >= 2:
-        change_1m = round((closes[-1] / closes[0] - 1) * 100, 2)
+        change_1m = round((last / closes[0] - 1) * 100, 2)
     return {
         "symbol": symbol,
         "price": price,
@@ -219,6 +267,14 @@ def main():
         if "error" not in r:
             stocks[sym] = r
     output["magnificent_7"] = stocks
+
+    # 2.4 AI 硬件/半导体重点个股
+    hw = []
+    for sym, name in AI_HARDWARE.items():
+        r = fetch_yahoo(sym)
+        if "error" not in r:
+            hw.append({**r, "name": name})
+    output["ai_hardware"] = hw
 
     # 2.5 板块表现（11 大板块 ETF）
     print("🏢 获取板块表现...", file=sys.stderr)

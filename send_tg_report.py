@@ -8,6 +8,7 @@
 
 import re
 import sys
+import json
 import configparser
 import subprocess
 from pathlib import Path
@@ -49,12 +50,22 @@ HERMES_CMD = [_HERMES_CMD, "send", "--to"]
 
 
 # ─── HTML → Telegram 等宽纯文本 ─────────────────────────────
+_DATE_RE = re.compile(r"美股收盘日报[｜|]\s*(\d{4}-\d{2}-\d{2})")
+
+
+def _report_title(html: str) -> str:
+    """从 HTML 里提取报告日期生成标题（原先写死日期，发出去的标题日期是错的）。"""
+    m = _DATE_RE.search(html)
+    date = m.group(1) if m else __import__("datetime").date.today().isoformat()
+    return f"📈 美股收盘日报｜{date}"
+
+
 def html_to_tg(html: str) -> str:
+    title = _report_title(html)
     # 0) 只取 <body>，避免 <head> 里的 <title> 重复；再从正文里只保留第一个报告标题之后的内容
     m = re.search(r"<body[^>]*>(.*?)</body>", html, re.DOTALL | re.IGNORECASE)
     html = m.group(1) if m else html
-    title_mark = "📈 美股收盘日报｜2026-07-04"
-    idx = html.find(title_mark)
+    idx = html.find(title)
     html = html[idx:] if idx >= 0 else html
 
     # 1) 移除 style / script
@@ -87,9 +98,7 @@ def html_to_tg(html: str) -> str:
     html = re.sub(r"<[^>]+>", " ", html)
 
     # 4) 先去掉正文里所有标题行，后面再加统一 header，避免重复
-    title_variants = ["📈 美股收盘日报｜2026-07-04", "美股收盘日报｜2026-07-04"]
-    for variant in title_variants:
-        html = re.sub(r"(?m)^" + re.escape(variant) + r"\s*$", "", html)
+    for variant in (title, f"美股收盘日报｜{title.split('｜')[-1]}"):
         html = re.sub(r"(?m)^\s*" + re.escape(variant) + r"\s*$", "", html)
     html = re.sub(r"\n{3,}", "\n\n", html)
 
@@ -103,7 +112,7 @@ def html_to_tg(html: str) -> str:
         html = html.replace(f"\x00TABLE{i}\x00", "\n<pre>\n" + tbl + "\n</pre>\n")
 
     # 7) 头尾包裹
-    header = "<b>📈 美股收盘日报｜2026-07-04</b>"
+    header = f"<b>{title}</b>"
     footer = "\n\n⚠️ 本报告基于市场数据自动生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。"
     full = header + "\n\n" + html.strip() + footer
     full = re.sub(r"\n{3,}", "\n\n", full)
@@ -111,7 +120,7 @@ def html_to_tg(html: str) -> str:
 
 
 # ─── 分段 ─────────────────────────────────────────────────
-def split_chunks(text: str):
+def split_chunks(text: str, title: str):
     chunks = []
     pos = 0
     first = True
@@ -125,7 +134,7 @@ def split_chunks(text: str):
             split = cut.rfind("\n\n")
         if split < 400:
             split = CHUNK_LIMIT
-        prefix = "" if first else "<b>📈 美股收盘日报｜2026-07-04（续）</b>\n\n"
+        prefix = "" if first else f"<b>{title}（续）</b>\n\n"
         chunks.append(prefix + text[pos : pos + split].strip())
         pos += split
         first = False
@@ -133,20 +142,97 @@ def split_chunks(text: str):
 
 
 # ─── 发送 ─────────────────────────────────────────────────
-def send_telegram(file_path: Path, chat_id: str):
+def _extract_message_id(stdout: str) -> str:
+    """从 hermes send --json 的输出里取 message_id（兼容多种返回结构）。"""
+    text = (stdout or "").strip()
+    if not text:
+        return "?"
+    try:
+        data = json.loads(text)
+    except Exception:
+        m = re.search(r'message_id["\']?\s*[:=]\s*"?(\d+)', text)
+        return m.group(1) if m else "?"
+    stack = [data]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            if isinstance(cur.get("message_id"), (int, str)):
+                return str(cur["message_id"])
+            stack.extend(cur.values())
+        elif isinstance(cur, list):
+            stack.extend(cur)
+    return "?"
+
+
+def _hermes_skipped(stdout: str) -> bool:
+    """hermes send 在 cron 里若目标与自动投递目标相同，会返回 skipped=true 而并未发出。"""
+    try:
+        data = json.loads((stdout or "").strip())
+    except Exception:
+        return False
+    return bool(isinstance(data, dict) and data.get("skipped"))
+
+
+def _bot_token() -> str:
+    """从 ~/.hermes/.env 读取 Telegram bot token。"""
+    env = Path(os.path.expanduser("~")) / ".hermes" / ".env"
+    try:
+        for line in env.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("TELEGRAM_BOT_TOKEN="):
+                return line.split("=", 1)[1].strip().strip("\"'")
+    except OSError:
+        pass
+    return ""
+
+
+def _send_via_bot_api(chat_id: str, text: str) -> dict:
+    """Telegram Bot API 直发。
+
+    cron 里 hermes send 会因"与自动投递同目标"跳过，若直接当成功会误报投递成功，
+    所以被跳过时改用 Bot API 真正把日报送进频道。
+    """
+    import urllib.request as _urlreq
+    token = _bot_token()
+    if not token:
+        return {"ok": False, "id": "缺少 TELEGRAM_BOT_TOKEN", "raw": ""}
+    payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                          "disable_web_page_preview": True}).encode()
+    req = _urlreq.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=payload,
+                          headers={"Content-Type": "application/json"})
+    try:
+        with _urlreq.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read())
+    except Exception as e:  # 网络/权限错误如实上报
+        return {"ok": False, "id": f"Bot API 异常: {e}", "raw": ""}
+    if body.get("ok"):
+        msg_id = str((body.get("result") or {}).get("message_id", "?"))
+        return {"ok": True, "id": msg_id, "raw": json.dumps(body, ensure_ascii=False)[:500]}
+    return {"ok": False, "id": f"Bot API 失败: {body.get('description')}",
+            "raw": json.dumps(body, ensure_ascii=False)[:500]}
+
+
+def send_telegram(file_path: Path, chat_id: str) -> dict:
+    """发送单个分段，返回 {ok, id, raw, transport}。
+
+    优先 hermes send；若被 cron 去重跳过或失败，退回 Bot API 直发。
+    """
     cmd = HERMES_CMD + [f"telegram:{chat_id}", "--file", str(file_path), "--json"]
+    raw = ""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        msg_id = "?"
-        if result.stdout.strip():
-            try:
-                import json
-                msg_id = json.loads(result.stdout).get("message_id", "?")
-            except Exception:
-                pass
-        return True, msg_id
+        raw = result.stdout.strip()
+        if not _hermes_skipped(raw):
+            return {"ok": True, "id": _extract_message_id(raw), "raw": raw[:500],
+                    "transport": "hermes-send"}
     except subprocess.CalledProcessError as e:
-        return False, f"{e.returncode}: {e.stderr.strip()}"
+        raw = (e.stderr or "").strip()
+
+    text = Path(file_path).read_text(encoding="utf-8")
+    fallback = _send_via_bot_api(chat_id, text)
+    fallback["transport"] = "bot-api"
+    fallback["raw"] = fallback.get("raw") or raw[:500]
+    return fallback
 
 
 # ─── 主流程 ────────────────────────────────────────────────
@@ -180,7 +266,7 @@ def main():
     print(f"✅ 转换完成: {len(full_text)} 字符")
 
     # 3. 分段
-    chunks = split_chunks(full_text)
+    chunks = split_chunks(full_text, _report_title(raw))
     print(f"✅ 分段完成: {len(chunks)} 段")
     for i, c in enumerate(chunks, 1):
         p = base_dir / f"chunk_{i}.txt"
@@ -191,12 +277,17 @@ def main():
     print()
     print("📤 开始发送...")
     chunk_files = sorted(base_dir.glob("chunk_*.txt"))
+    send_log = base_dir / "tg_send_log.jsonl"
     for i, chunk_file in enumerate(chunk_files, 1):
-        ok, msg_id = send_telegram(chunk_file, chat_id)
-        if ok:
-            print(f"   [{i}] ✅ 已发送 (message_id={msg_id}) -> {chunk_file.name}")
+        res = send_telegram(chunk_file, chat_id)
+        with open(send_log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"chunk": chunk_file.name, "ok": res["ok"], "message_id": res["id"],
+                                 "transport": res.get("transport"), "raw": res.get("raw", "")[:500]},
+                                ensure_ascii=False) + "\n")
+        if res["ok"]:
+            print(f"   [{i}] ✅ 已发送 (message_id={res['id']}, via {res.get('transport')}) -> {chunk_file.name}")
         else:
-            print(f"   [{i}] ❌ 发送失败: {msg_id}")
+            print(f"   [{i}] ❌ 发送失败: {res['id']}")
             sys.exit(1)
 
     print()

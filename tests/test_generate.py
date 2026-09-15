@@ -196,8 +196,18 @@ class TestSectorDriver:
         assert "窄幅整理" in gsd._sector_driver("金融", 0.5)
 
     def test_unknown_sector(self):
-        # 未知板块用通用兜底文案
-        assert gsd._sector_driver("未知板块", 1.0) == "板块基本面，窄幅整理"
+        # 未知板块用通用兜底文案，并附带当日涨跌幅
+        assert gsd._sector_driver("未知板块", 1.0) == "板块基本面，温和走强 +1.0%"
+
+    def test_mild_up(self):
+        assert gsd._sector_driver("金融", 1.2) == "利率曲线与信贷环境敏感，温和走强 +1.2%"
+
+    def test_mild_down(self):
+        assert gsd._sector_driver("金融", -1.2) == "利率曲线与信贷环境敏感，小幅走弱 -1.2%"
+
+    def test_flat_keeps_value(self):
+        # 窄幅整理也要带上真实涨跌幅，便于核对
+        assert gsd._sector_driver("金融", 0.2) == "利率曲线与信贷环境敏感，窄幅整理 +0.2%"
 
     def test_missing(self):
         # 涨跌幅缺失 → 只返回基础文案
@@ -240,7 +250,7 @@ class TestAdaptGroup:
         assert rows[0]["etf"] == "XLK"
         assert rows[0]["change"] == 2.0
         assert rows[0]["vs_sp500"] == "跑赢"   # 2.0 - 1.0 = 1.0 ≥ 0.5
-        assert rows[0]["driver"].endswith("放量大涨")
+        assert rows[0]["driver"].endswith("放量大涨 +2.0%")
         assert rows[1]["vs_sp500"] == "跑输"   # -1.0 - 1.0 = -2.0 ≤ -0.5
 
     def test_theme_kind(self):

@@ -289,21 +289,21 @@
         <div class="section">
             <h2>⏰ 2.盘中走势复盘</h2>
             <div class="timeline">
-                <h4>📈 时间线复盘：</h4>
+                <h4>📈 日内数据（来自日线行情，无分时数据源）：</h4>
                 <div class="card">
-                    <h5>🌅 盘前</h5>
+                    <h5>📉 日内最低</h5>
                     <p>{{ pre_market }}</p>
                 </div>
                 <div class="card">
-                    <h5>🏁 开盘</h5>
+                    <h5>📈 日内最高</h5>
                     <p>{{ opening }}</p>
                 </div>
                 <div class="card">
-                    <h5>🕐 午盘</h5>
+                    <h5>🏁 收盘</h5>
                     <p>{{ midday }}</p>
                 </div>
                 <div class="card">
-                    <h5>🌅 尾盘</h5>
+                    <h5>📊 日内位置</h5>
                     <p>{{ closing }}</p>
                 </div>
             </div>
@@ -354,7 +354,7 @@
             <div class="card">
                 <h4>🔍 CME FedWatch 数据：</h4>
                 <p><strong>下次FOMC降息概率：</strong>{{ fed_rate_cut_probability }}</p>
-                <p><strong>年内预期降息次数：</strong>{{ expected_rate_cuts }}次</p>
+                <p><strong>年内预期降息次数：</strong>{{ expected_rate_cuts }}</p>
                 <p><strong>较前一日变化：</strong>{{ fed_change }}</p>
             </div>
 
@@ -483,18 +483,18 @@
                 <tbody>
                     <tr>
                         <td>S&P 500</td>
-                        <td>{{ ma_20_sp500 }}%</td>
-                        <td>{{ ma_50_sp500 }}%</td>
-                        <td>{{ ma_100_sp500 }}%</td>
-                        <td>{{ ma_200_sp500 }}%</td>
+                        <td>{{ ma_20_sp500 }}{% if ma_20_sp500 is number %}%{% endif %}</td>
+                        <td>{{ ma_50_sp500 }}{% if ma_50_sp500 is number %}%{% endif %}</td>
+                        <td>{{ ma_100_sp500 }}{% if ma_100_sp500 is number %}%{% endif %}</td>
+                        <td>{{ ma_200_sp500 }}{% if ma_200_sp500 is number %}%{% endif %}</td>
                         <td>{{ ma_20_sp500_analysis }}</td>
                     </tr>
                     <tr>
                         <td>Nasdaq 100</td>
-                        <td>{{ ma_20_qqq }}%</td>
-                        <td>{{ ma_50_qqq }}%</td>
-                        <td>{{ ma_100_qqq }}%</td>
-                        <td>{{ ma_200_qqq }}%</td>
+                        <td>{{ ma_20_qqq }}{% if ma_20_qqq is number %}%{% endif %}</td>
+                        <td>{{ ma_50_qqq }}{% if ma_50_qqq is number %}%{% endif %}</td>
+                        <td>{{ ma_100_qqq }}{% if ma_100_qqq is number %}%{% endif %}</td>
+                        <td>{{ ma_200_qqq }}{% if ma_200_qqq is number %}%{% endif %}</td>
                         <td>{{ ma_20_qqq_analysis }}</td>
                     </tr>
                 </tbody>
@@ -599,22 +599,22 @@
                 <thead>
                     <tr>
                         <th>股票</th>
-                        <th>涨跌幅</th>
-                        <th>原因</th>
-                        <th>技术位置</th>
-                        <th>后续关注</th>
+                        <th>当日涨跌</th>
+                        <th>近5日</th>
+                        <th>近1月</th>
+                        <th>日内区间</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for stock in magnificent_7 %}
                     <tr>
                         <td>{{ stock.symbol }}</td>
-                        <td class="{% if stock.change_pct > 0 %}positive{% elif stock.change_pct < 0 %}negative{% else %}neutral{% endif %}">
-                            {% if stock.change_pct > 0 %}+{% endif %}{{ stock.change_pct|round(2) }}%
+                        <td class="{{ stock.cls }}">
+                            {{ stock.chg_text }}
                         </td>
-                        <td>{{ stock.reason }}</td>
-                        <td>{{ stock.technical }}</td>
-                        <td>{{ stock.watch }}</td>
+                        <td class="{{ stock.cls_5d }}">{{ stock.chg_5d_text }}</td>
+                        <td class="{{ stock.cls_1m }}">{{ stock.chg_1m_text }}</td>
+                        <td>{{ stock.range }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -626,22 +626,22 @@
                 <thead>
                     <tr>
                         <th>股票</th>
-                        <th>涨跌幅</th>
-                        <th>原因</th>
-                        <th>技术位置</th>
-                        <th>后续关注</th>
+                        <th>当日涨跌</th>
+                        <th>近5日</th>
+                        <th>近1月</th>
+                        <th>日内区间</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for stock in ai_hardware %}
                     <tr>
                         <td>{{ stock.symbol }}</td>
-                        <td class="{% if stock.change_pct > 0 %}positive{% elif stock.change_pct < 0 %}negative{% else %}neutral{% endif %}">
-                            {% if stock.change_pct > 0 %}+{% endif %}{{ stock.change_pct|round(2) }}%
+                        <td class="{{ stock.cls }}">
+                            {{ stock.chg_text }}
                         </td>
-                        <td>{{ stock.reason }}</td>
-                        <td>{{ stock.technical }}</td>
-                        <td>{{ stock.watch }}</td>
+                        <td class="{{ stock.cls_5d }}">{{ stock.chg_5d_text }}</td>
+                        <td class="{{ stock.cls_1m }}">{{ stock.chg_1m_text }}</td>
+                        <td>{{ stock.range }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -673,9 +673,7 @@
                         <td>{{ earnings.revenue }}</td>
                         <td>{{ earnings.eps }}</td>
                         <td>{{ earnings.beat_guidance }}</td>
-                        <td class="{% if earnings.after_hours > 0 %}positive{% elif earnings.after_hours < 0 %}negative{% else %}neutral{% endif %}">
-                            {% if earnings.after_hours > 0 %}+{% endif %}{{ earnings.after_hours|round(2) }}%
-                        </td>
+                        <td>{{ earnings.after_hours }}</td>
                         <td>{{ earnings.analysis }}</td>
                     </tr>
                     {% endfor %}
@@ -760,27 +758,23 @@
                     <tr>
                         <th>股票</th>
                         <th>当日涨跌</th>
-                        <th>当前趋势</th>
-                        <th>关键新闻</th>
-                        <th>支撑位</th>
-                        <th>压力位</th>
-                        <th>我的判断</th>
+                        <th>近5日</th>
+                        <th>近1月</th>
+                        <th>日内低点</th>
+                        <th>日内高点</th>
+                        <th>当日表现</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for focus in focus_stocks %}
                     <tr>
                         <td>{{ focus.symbol }}</td>
-                        <td class="{% if focus.change_pct > 0 %}positive{% elif focus.change_pct < 0 %}negative{% else %}neutral{% endif %}">
-                            {% if focus.change_pct > 0 %}+{% endif %}{{ focus.change_pct|round(2) }}%
-                        </td>
-                        <td>{{ focus.trend }}</td>
-                        <td>{{ focus.news }}</td>
-                        <td>{{ focus.support }}</td>
-                        <td>{{ focus.resistance }}</td>
-                        <td class="{% if focus.judgment == '继续强势' %}positive{% elif focus.judgment == '破位风险' %}negative{% else %}neutral{% endif %}">
-                            {{ focus.judgment }}
-                        </td>
+                        <td class="{{ focus.cls }}">{{ focus.chg_text }}</td>
+                        <td class="{{ focus.cls_5d }}">{{ focus.chg_5d_text }}</td>
+                        <td class="{{ focus.cls_1m }}">{{ focus.chg_1m_text }}</td>
+                        <td>{{ focus.low|round(2) }}</td>
+                        <td>{{ focus.high|round(2) }}</td>
+                        <td class="{{ focus.cls }}">{{ focus.judgment }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -801,20 +795,8 @@
                     <li><strong>美元指数方向：</strong>{{ dollar_observation }}</li>
                     <li><strong>油价/黄金/VIX：</strong>{{ commodity_observation }}</li>
                     <li><strong>Fed官员讲话：</strong>{{ fed_speech_observation }}</li>
-                    <tr>
-                        <td>创52周新高数量</td>
-                        <td>{{ nyda_new_highs }}</td>
-                        <td>{{ nasdaq_new_highs }}</td>
-                        <td>{{ new_highs_analysis }}</td>
-                    </tr>
-                    <tr>
-                        <td>创52周新低数量</td>
-                        <td>{{ nyda_new_lows }}</td>
-                        <td>{{ nasdaq_new_lows }}</td>
-                        <td>{{ new_lows_analysis }}</td>
-                    </tr>
-                </tbody>
-            </table>
+                </ul>
+            </div>
         </div>
 		
         <!-- 14. 风险提示 -->

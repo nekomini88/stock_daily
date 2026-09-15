@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 import datetime
@@ -20,28 +19,45 @@ from pathlib import Path
 import requests  # 注意：必须用 requests，urllib 会被 Cloudflare 拦（403 error code 1010）
 
 ROOT = Path("/root/stock_daily")
-LLM_API_URL = os.environ.get("LLM_API_URL", "https://opencode.ai/zen/v1/chat/completions")
-LLM_MODEL = os.environ.get("LLM_MODEL", "longcat-2.0-free")
-LLM_TIMEOUT = 120
+ENV_PATH = Path("/root/.hermes/.env")
+LLM_TIMEOUT = 180
+MAX_TOKENS = 8192
+MIN_SECTIONS = 12  # 至少覆盖 12/15 章才接受该 provider 的输出
+
+# Provider 链：免费额度优先，失败依次降级。
+# 注意：OpenCode Zen 免费档（*-free）现在只允许在 OpenCode 客户端内使用
+# （返回 MissingSessionID），longcat-2.0-free 也已下线，故不再作为默认。
+PROVIDERS = [
+    {"name": "z.ai/glm-4.5-air", "url": "https://api.z.ai/api/paas/v4/chat/completions",
+     "key_env": "GLM_API_KEY", "model": "glm-4.5-air"},
+    {"name": "z.ai/glm-4.5-flash", "url": "https://api.z.ai/api/paas/v4/chat/completions",
+     "key_env": "GLM_API_KEY", "model": "glm-4.5-flash"},
+    {"name": "openrouter/gemini-2.5-flash", "url": "https://openrouter.ai/api/v1/chat/completions",
+     "key_env": "OPENROUTER_API_KEY", "model": "google/gemini-2.5-flash"},
+    {"name": "openrouter/deepseek-chat-v3.1", "url": "https://openrouter.ai/api/v1/chat/completions",
+     "key_env": "OPENROUTER_API_KEY", "model": "deepseek/deepseek-chat-v3.1"},
+]
+
+LLM_KEYS = [
+    "summary", "market_overview", "intraday", "macro", "sectors", "themes",
+    "breadth", "technical", "stocks", "earnings", "institutions", "rotation",
+    "watchlist", "risks", "conclusion",
+]
 
 
-def load_llm_key() -> str:
-    env_path = Path("/root/.hermes/.env")
+def load_env_keys() -> dict:
+    """读取 /root/.hermes/.env 里的 KEY=VALUE（跳过注释）。"""
+    keys = {}
     try:
-        for line in env_path.read_text(encoding="utf-8").splitlines():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
             line = line.strip()
-            if line.startswith("OPENCODE_ZEN_API_KEY="):
-                return line.split("=", 1)[1].strip().strip("\"'")
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name, val = line.split("=", 1)
+            keys[name.strip()] = val.strip().strip("\"'")
     except Exception as e:
         print(f"[WARN] 读取 .env 失败: {e}", file=sys.stderr)
-    return ""
-
-
-def _pct(ind: dict) -> str:
-    try:
-        return f"{float(ind.get('change_pct', 0)):+.2f}%"
-    except Exception:
-        return "—"
+    return keys
 
 
 def _compact_data(data: dict) -> dict:
@@ -87,10 +103,10 @@ def _compact_data(data: dict) -> dict:
     }
 
     macro = data.get("macro") or {}
+    # 只传价格会让 LLM 看不出方向（曾把 -0.19% 的美元写成"上涨"），价格与涨跌一起给
     out["macro"] = {
-        k: (v if isinstance(v, (int, float, str)) else
-            (v.get("price") or v.get("value") or v.get("change_pct") if isinstance(v, dict) else v))
-        for k, v in macro.items()
+        k: {"price": v.get("price"), "change_pct": v.get("change_pct")}
+        for k, v in macro.items() if isinstance(v, dict)
     }
     return out
 
@@ -132,61 +148,81 @@ def _build_user_prompt(data_compact: dict) -> str:
     )
 
 
-def generate_conclusions(data: dict, max_retries=3) -> str:
-    """调用 LLM 生成 15 条结论文本。失败返回空串（由调用方兜底）。"""
-    api_key = load_llm_key()
-    if not api_key:
-        print("[WARN] 未找到 OPENCODE_ZEN_API_KEY，跳过 LLM", file=sys.stderr)
-        return ""
-
-    data_compact = _compact_data(data)
-    sys_prompt = SYSTEM_PROMPT
-    usr_prompt = _build_user_prompt(data_compact)
-
+def _call_provider(provider: dict, api_key: str, sys_prompt: str, usr_prompt: str) -> str:
+    """调用单个 provider，返回正文（失败返回空串）。"""
     payload = {
-        "model": LLM_MODEL,
+        "model": provider["model"],
         "messages": [
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": usr_prompt},
         ],
-        "max_tokens": 4096,
+        # 推理型模型（glm-4.5-air）的思考与正文共享额度，给足避免正文为空
+        "max_tokens": MAX_TOKENS,
         "temperature": 0.3,
     }
+    try:
+        resp = requests.post(
+            provider["url"],
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=LLM_TIMEOUT,
+        )
+        if resp.status_code == 429:
+            retry_after = int(resp.headers.get("Retry-After", "5") or 5)
+            print(f"[WARN] {provider['name']} 429 限流，等待 {retry_after}s", file=sys.stderr)
+            time.sleep(retry_after + 1)
+            return ""
+        if resp.status_code in (401, 403):
+            print(f"[WARN] {provider['name']} {resp.status_code} 无法访问: {resp.text[:200]}", file=sys.stderr)
+            return ""
+        resp.raise_for_status()
+        body = resp.json()
+        msg = (body.get("choices") or [{}])[0].get("message", {}) or {}
+        content = (msg.get("content") or "").strip()
+        if not content:
+            content = (msg.get("reasoning_content") or "").strip()
+        if not content:
+            print(f"[WARN] {provider['name']} 返回空 content", file=sys.stderr)
+        return content
+    except Exception as e:
+        print(f"[WARN] {provider['name']} 调用失败: {e}", file=sys.stderr)
+        return ""
 
-    for attempt in range(max_retries):
-        try:
-            resp = requests.post(
-                LLM_API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=LLM_TIMEOUT,
-            )
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", "3"))
-                print(f"[WARN] LLM 429 限流，等待 {retry_after}s", file=sys.stderr)
-                time.sleep(retry_after + 1)
-                continue
-            if resp.status_code == 403:
-                print(f"[WARN] LLM 403 Forbidden（Cloudflare 拦截或 key 失效）: {resp.text[:200]}", file=sys.stderr)
-                time.sleep(3)
-                continue
-            resp.raise_for_status()
-            body = resp.json()
-            msg = (body.get("choices") or [{}])[0].get("message", {}) or {}
-            content = (msg.get("content") or "").strip()
+
+def generate_conclusions(data: dict, max_retries=2):
+    """按 provider 链生成 15 条结论。
+
+    返回 (parsed: dict, provider_name: str)。全部 provider 失败或覆盖不足时
+    parsed 为空 dict，由调用方走诚实占位兜底（绝不写假数据）。
+    """
+    env_keys = load_env_keys()
+    data_compact = _compact_data(data)
+    usr_prompt = _build_user_prompt(data_compact)
+
+    for provider in PROVIDERS:
+        api_key = env_keys.get(provider["key_env"], "")
+        if not api_key:
+            print(f"[WARN] {provider['name']} 缺少 {provider['key_env']}，跳过", file=sys.stderr)
+            continue
+        for attempt in range(max_retries):
+            content = _call_provider(provider, api_key, SYSTEM_PROMPT, usr_prompt)
             if not content:
-                content = (msg.get("reasoning_content") or "").strip()
-            if content:
-                return content
-            print("[WARN] LLM 返回空 content", file=sys.stderr)
-        except Exception as e:
-            print(f"[WARN] LLM 生成失败 (attempt {attempt+1}): {e}", file=sys.stderr)
-            if attempt < max_retries - 1:
-                time.sleep(3)
-    return ""
+                if attempt < max_retries - 1:
+                    time.sleep(3)
+                continue
+            parsed = _parse_json(content)
+            covered = sum(
+                1 for k in LLM_KEYS
+                if isinstance(parsed.get(k), str) and str(parsed.get(k)).strip()
+            )
+            if covered >= MIN_SECTIONS:
+                return parsed, provider["name"]
+            print(f"[WARN] {provider['name']} 仅覆盖 {covered}/15 章，尝试下一个源", file=sys.stderr)
+            break
+    return {}, ""
 
 
 def _parse_json(content: str) -> dict:
@@ -229,14 +265,18 @@ def main():
         return 1
 
     data = json.loads(data_file.read_text(encoding="utf-8"))
-    content = generate_conclusions(data)
-    parsed = _parse_json(content) if content else {}
+    parsed, provider_name = generate_conclusions(data)
 
     out_dir = ROOT / "llm_data"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"market_llm_{today}.json"
     out_file.write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"✅ LLM 结论已生成: {out_file} ({len(parsed)} 章节)")
+
+    if len(parsed) < MIN_SECTIONS:
+        # 明确失败信号：报告改走真实数据/诚实占位兜底，绝不写假数据
+        print(f"❌ LLM 结论生成失败: {out_file} ({len(parsed)}/15 章)", file=sys.stderr)
+        return 1
+    print(f"✅ LLM 结论已生成: {out_file} ({len(parsed)}/15 章, 来源 {provider_name})")
     return 0
 
 

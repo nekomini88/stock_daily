@@ -28,6 +28,7 @@ _CHG_BIG_MOVE = 3.0       # 资产/主题: ≥3% 强势上涨
 _CHG_BIG_DROP = -3.0      # 资产/主题: ≤-3% 明显下跌
 _CHG_SECTOR_BOOST = 2.0   # 板块: ≥2% 放量大涨
 _CHG_SECTOR_DROP = -2.0   # 板块: ≤-2% 承压回落
+_CHG_SECTOR_MILD = 1.0    # 板块: ±1% 温和走强/小幅走弱
 _VS_SP500_THRESHOLD = 0.5  # 板块相对标普跑赢/跑输阈值
 _NUM_K = 1e3
 _NUM_M = 1e6
@@ -154,17 +155,21 @@ _SECTOR_BASE = {
 
 
 def _sector_driver(name, chg):
-    """板块驱动解读：按涨跌幅附加强弱文案"""
+    """板块驱动解读：按涨跌幅附加强弱文案（分档：≥2% 大涨 / ≥1% 温和 / ≤-2% 回落 / ≤-1% 走弱）"""
     base = _SECTOR_BASE.get(name, "板块基本面")
     try:
         c = float(chg)
     except (TypeError, ValueError):
         return base
     if c >= _CHG_SECTOR_BOOST:
-        return f"{base}，放量大涨"
-    elif c <= _CHG_SECTOR_DROP:
-        return f"{base}，承压回落"
-    return f"{base}，窄幅整理"
+        return f"{base}，放量大涨 {c:+.1f}%"
+    if c >= _CHG_SECTOR_MILD:
+        return f"{base}，温和走强 {c:+.1f}%"
+    if c <= _CHG_SECTOR_DROP:
+        return f"{base}，承压回落 {c:+.1f}%"
+    if c <= -_CHG_SECTOR_MILD:
+        return f"{base}，小幅走弱 {c:+.1f}%"
+    return f"{base}，窄幅整理 {c:+.1f}%"
 
 
 def _vs_sp500(chg, sp_chg):
@@ -276,11 +281,16 @@ def _sp500_change(data):
 
 
 def _apply_real_group(report_data, data, key, kind, sp500_chg=None):
-    """14.5 用采集的真实板块/主题数据替换硬编码表格（仅当有适配结果）。"""
+    """14.5 用采集的真实板块/主题数据替换硬编码表格（仅当有适配结果）。
+
+    板块表按当日涨跌排序，使「排名」列与真实表现一致。
+    """
     real = data.get(key)
     if isinstance(real, list) and real:
         adapted = _adapt_group(real, {"kind": kind}, sp500_chg)
         if adapted:
+            if kind == "sector":
+                adapted.sort(key=lambda r: -(r["change"] if isinstance(r.get("change"), (int, float)) else -999))
             report_data[key] = adapted
 
 
@@ -288,6 +298,254 @@ _SYMBOL_ALIAS = {
     "S&P 500": "^GSPC", "Nasdaq 100": "^IXIC", "Dow Jones": "^DJI",
     "Russell 2000": "^RUT", "半导体指数": "^SOX", "VIX": "^VIX",
 }
+
+# 无数据源 / LLM 未生成时的诚实占位（绝不写假数字）
+_LLM_MISSING = "暂无（当日 LLM 分析未生成）"
+_NO_SOURCE = "暂无（采集器未接入该数据源）"
+
+
+def _num(value):
+    """只接受真实数值（排除 bool/字符串），否则 None。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def _iter_stocks(items):
+    """兼容采集器输出：dict（{symbol: {...}}）或 list（[{symbol: ...}]）。"""
+    if isinstance(items, dict):
+        for sym, item in items.items():
+            if isinstance(item, dict):
+                yield sym, item
+    elif isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict):
+                yield item.get("symbol") or item.get("name", ""), item
+
+
+def _trend_text(change_1m):
+    """由近1月涨跌推导趋势文字。"""
+    if change_1m is None:
+        return _NO_SOURCE
+    if change_1m >= 5:
+        return f"近1月 {change_1m:+.1f}%，偏强"
+    if change_1m <= -5:
+        return f"近1月 {change_1m:+.1f}%，偏弱"
+    return f"近1月 {change_1m:+.1f}%，震荡"
+
+
+def _move_judgment(change_pct):
+    """由当日涨跌推导当日表现标签。"""
+    if change_pct is None:
+        return _NO_SOURCE
+    if change_pct <= -3:
+        return "跌幅居前"
+    if change_pct >= 3:
+        return "涨幅居前"
+    return "窄幅波动"
+
+
+def _cls(value):
+    """表格单元格颜色类（None → neutral）。"""
+    if (value or 0) > 0:
+        return "positive"
+    if (value or 0) < 0:
+        return "negative"
+    return "neutral"
+
+
+def _pct_text(value):
+    """带符号百分比文本；无真实数值时诚实占位。"""
+    return f"{value:+.2f}%" if value is not None else _NO_SOURCE
+
+
+def _mover_rows(items):
+    """个股表格行——全部字段来自真实行情（涨跌/近5日/近1月/日内区间）。"""
+    rows = []
+    for sym, item in _iter_stocks(items):
+        chg = _num(item.get("change_pct"))
+        if item.get("error") or chg is None:
+            continue
+        low, high = _num(item.get("low")), _num(item.get("high"))
+        chg5, chg1m = _num(item.get("change_5d")), _num(item.get("change_1m"))
+        rows.append({
+            "symbol": sym,
+            "name": item.get("name", sym),
+            "change_pct": chg,
+            "change_5d": chg5,
+            "change_1m": chg1m,
+            "low": low,
+            "high": high,
+            # 展示层字段：模板只做取值，避免 None 参与比较
+            "chg_text": _pct_text(chg),
+            "chg_5d_text": _pct_text(chg5),
+            "chg_1m_text": _pct_text(chg1m),
+            "cls": _cls(chg),
+            "cls_5d": _cls(chg5),
+            "cls_1m": _cls(chg1m),
+            "range": f"{low:,.2f} - {high:,.2f}" if low is not None and high is not None else _NO_SOURCE,
+            "trend": _trend_text(chg1m),
+        })
+    return rows
+
+
+def _group_side(items, name_key):
+    """按当日涨跌排序分组，返回 (全部, 前三涨, 前三跌)。"""
+    ranked = [i for i in (items or []) if _num(i.get("change_pct")) is not None]
+    top = sorted(ranked, key=lambda i: -i["change_pct"])[:3]
+    bottom = sorted(ranked, key=lambda i: i["change_pct"])[:3]
+    label = lambda i: f"{i.get(name_key)}({i['change_pct']:+.2f}%)"
+    return ranked, [label(i) for i in top], [label(i) for i in bottom]
+
+
+def _apply_real_session(report_data, data):
+    """2.盘中走势复盘：只有日线快照，就写日线事实，不编分时走势。"""
+    sp = (data.get("indices") or {}).get(_SP500_NAME) or {}
+    low, high, price = _num(sp.get("low")), _num(sp.get("high")), _num(sp.get("price"))
+    if price is None:
+        return
+    prev = _num(sp.get("prev_close"))
+    report_data["pre_market"] = f"日内最低 {low:,.2f}" if low is not None else _NO_SOURCE
+    report_data["opening"] = f"日内最高 {high:,.2f}" if high is not None else _NO_SOURCE
+    report_data["midday"] = (
+        f"收盘 {price:,.2f}" + (f"，较前一交易日 {price / prev - 1:+.2%}" if prev else "")
+    )
+    if low is not None and high is not None and high > low:
+        pos = (price - low) / (high - low) * 100
+        where = "偏上沿" if pos >= 66 else ("偏下沿" if pos <= 33 else "居中")
+        report_data["closing"] = f"收盘位于当日区间 {pos:.0f}% 位置（{where}）"
+    else:
+        report_data["closing"] = _NO_SOURCE
+
+
+def _apply_real_movers(report_data, data):
+    """8.1/8.2：七巨头与 AI 硬件表格改用真实行情。"""
+    mag = _mover_rows(data.get("magnificent_7") or {})
+    if mag:
+        report_data["magnificent_7"] = mag
+    hw = _mover_rows(data.get("ai_hardware") or [])
+    if hw:
+        report_data["ai_hardware"] = hw
+
+
+def _apply_real_focus_stocks(report_data, data, limit=5):
+    """12：重点关注股 = 当日真实波动最大的标的（七巨头 + AI 硬件）。"""
+    rows = _mover_rows(data.get("magnificent_7") or {}) + _mover_rows(data.get("ai_hardware") or [])
+    if not rows:
+        return
+    ranked = sorted(rows, key=lambda r: -abs(r["change_pct"]))[:limit]
+    report_data["focus_stocks"] = [{**r, "judgment": _move_judgment(r["change_pct"])} for r in ranked]
+
+
+def _apply_real_flows(report_data, data):
+    """11.板块轮动：资金流向与市场状态按真实板块涨跌推导。"""
+    ranked, top, bottom = _group_side(data.get("sectors_performance"), "name")
+    if not ranked:
+        return
+    report_data["money_flow_in"] = "、".join(top)
+    report_data["money_flow_out"] = "、".join(bottom)
+    up = sum(1 for s in ranked if s["change_pct"] > 0)
+    down = len(ranked) - up
+    if up <= 3:
+        state = "普跌调整"
+    elif up >= len(ranked) - 1:
+        state = "普涨行情"
+    else:
+        state = "分化震荡"
+    sp500 = _sp500_change(data)
+    detail = f"，标普500 当日 {sp500:+.2f}%" if sp500 is not None else ""
+    report_data["market_state"] = f"{state}：{len(ranked)} 大板块 {up} 涨 {down} 跌{detail}"
+
+
+def _apply_real_macro_observations(report_data, data):
+    """13.1 宏观观察 + 3.2 状态：全部由真实行情推导。"""
+    macro = data.get("macro") or {}
+    vix = (data.get("indices") or {}).get("VIX") or {}
+
+    def pc(item):
+        return _num(item.get("price")), _num(item.get("change_pct"))
+
+    y10, y10c = pc(macro.get("10Y收益率") or {})
+    if y10 is not None:
+        level = "，站上 5% 关口，估值压力显著" if y10 >= 5 else "，关注 4.5% 支撑与 5% 关口"
+        change = f"（当日 {y10c:+.2f}%）" if y10c is not None else ""
+        report_data["ten_yield_observation"] = f"10Y 收 {y10:.3f}%{change}{level}"
+
+    dxy, dxyc = pc(macro.get("美元指数DXY") or {})
+    if dxy is not None:
+        tone = "美元走强压制风险资产" if (dxyc or 0) > 0 else "美元走弱利好风险资产"
+        report_data["dollar_observation"] = f"DXY {dxy:.3f}（{dxyc:+.2f}%），{tone}" if dxyc is not None else f"DXY {dxy:.3f}"
+
+    parts = []
+    for label, name in (("WTI", "WTI原油"), ("黄金", "黄金"), ("铜", "铜期货")):
+        price, chg = pc(macro.get(name) or {})
+        if price is not None:
+            parts.append(f"{label} {price:,.2f}（{chg:+.2f}%）" if chg is not None else f"{label} {price:,.2f}")
+    vp, vc = pc(vix)
+    if vp is not None:
+        parts.append(f"VIX {vp:.2f}（{vc:+.2f}%）" if vc is not None else f"VIX {vp:.2f}")
+    if parts:
+        report_data["commodity_observation"] = "、".join(parts)
+
+
+def _apply_real_risk_table(report_data, data):
+    """14.风险提示：状态与等级按真实数据推导（无源维度诚实标注）。"""
+    macro = data.get("macro") or {}
+    y10, y10c = _num((macro.get("10Y收益率") or {}).get("price")), _num((macro.get("10Y收益率") or {}).get("change_pct"))
+    if y10 is not None:
+        report_data["macro_rate_status"] = "上行" if (y10c or 0) > 0 else ("下行" if (y10c or 0) < 0 else "持平")
+        report_data["macro_risk_level"] = "高" if y10 >= 5 else ("中高" if y10 >= 4.5 else "中")
+
+    ranked, _, _ = _group_side(data.get("sectors_performance"), "name")
+    if ranked:
+        up = sum(1 for s in ranked if s["change_pct"] > 0)
+        if up <= 3:
+            report_data["breadth_status"], report_data["breadth_risk_level"] = f"偏空（{up}/{len(ranked)} 板块上涨）", "高"
+        elif up < len(ranked):
+            report_data["breadth_status"], report_data["breadth_risk_level"] = f"分化（{up}/{len(ranked)} 板块上涨）", "中高"
+        else:
+            report_data["breadth_status"], report_data["breadth_risk_level"] = f"普涨（{up}/{len(ranked)} 板块上涨）", "低"
+
+    sox = (data.get("indices") or {}).get("半导体指数") or {}
+    sox_1m, sp_1m = _num(sox.get("change_1m")), _num(((data.get("indices") or {}).get(_SP500_NAME) or {}).get("change_1m"))
+    if sox_1m is not None and sp_1m is not None:
+        gap = sox_1m - sp_1m
+        report_data["ai_crowding_status"] = f"半导体近1月 {sox_1m:+.1f}% vs 标普 {sp_1m:+.1f}%（{'领先' if gap > 0 else '落后'} {abs(gap):.1f}pt）"
+        report_data["ai_crowding_risk_level"] = "中高" if gap > 5 else ("中" if gap > -5 else "低")
+
+    vix, vixc = _num((data.get("indices", {}).get("VIX") or {}).get("price")), _num((data.get("indices", {}).get("VIX") or {}).get("change_pct"))
+    if vix is not None:
+        bits = [f"VIX {vix:.2f}"]
+        if vixc is not None:
+            bits.append(f"当日 {vixc:+.2f}%")
+        if y10 is not None:
+            bits.append(f"10Y {y10:.3f}%")
+        report_data["main_risk"] = "波动放大：" + "、".join(bits)
+
+
+def _apply_no_source_placeholders(report_data):
+    """无数据源章节：明确标注暂无，不留编造内容。"""
+    report_data["fed_rate_cut_probability"] = _NO_SOURCE
+    report_data["expected_rate_cuts"] = _NO_SOURCE
+    report_data["fed_change"] = _NO_SOURCE
+    report_data["fed_speech_observation"] = _NO_SOURCE
+    report_data["earnings_risk_level"] = _NO_SOURCE
+    report_data["recent_earnings"] = [
+        {"company": _NO_SOURCE, "revenue": _NO_SOURCE, "eps": _NO_SOURCE,
+         "beat_guidance": _NO_SOURCE, "after_hours": _NO_SOURCE, "analysis": _NO_SOURCE},
+    ]
+    report_data["upcoming_earnings"] = [
+        {"date": _NO_SOURCE, "company": _NO_SOURCE, "focus": _NO_SOURCE, "impact": _NO_SOURCE},
+    ]
+    report_data["institutional_views"] = [
+        {"institution": _NO_SOURCE, "viewpoint": _NO_SOURCE,
+         "assets": _NO_SOURCE, "impact": _NO_SOURCE},
+    ]
+
+
+def _apply_llm_only_placeholders(report_data):
+    """LLM 未生成时的结论文字占位（与 _LLM_FIELD_MAP 的字段一致，LLM 成功会覆盖）。"""
+    _fill_placeholders(report_data, sorted(set(_LLM_FIELD_MAP.values()) - {"main_risk"}), _LLM_MISSING)
 
 
 def _build_technical_rows(data):
@@ -389,156 +647,20 @@ def _render_and_save(template, report_data, today):
     print(f"✅ 美股日报HTML报告已生成：{output_file}")
 
 
-# 硬编码兜底报告数据（真实数据适配/LLM 结论覆盖前的种子数据，generate_report 每次深拷贝使用）
+# 报告数据结构种子。这里**不放任何编造数值**：所有字段都由真实采集数据推导
+# （_apply_real_* / final_conclusion / LLM 结论），没有数据源的字段走诚实占位。
 _FALLBACK_REPORT_DATA = {
     "data": None,
-    "market_summary": "指数分化，科技股表现强劲，AI硬件继续主导市场",
-    "market_driver": "财报驱动，AI主线延续，利率环境相对稳定",
-    "market_sentiment": "risk-on情绪，资金流入科技成长股",
-    "main_focus": "AI硬件、软件、半导体板块",
-    "technical_analysis": "标普创新高，纳指相对弱势，市场宽度分化",
-    "pre_market": "美股期货小幅高开，科技股期货领涨",
-    "opening": "开盘后科技股快速拉升，纳指一度涨超1%",
-    "midday": "午盘出现分化，部分获利盘回吐",
-    "closing": "尾盘科技股再度走强，纳指收复日内失地",
-    "core_reason": "财报季进入高峰期，AI相关公司业绩超预期",
-    "bond_analysis_summary": "美债收益率小幅上行，曲线趋于平坦化",
-    "fed_rate_cut_probability": "85%",
-    "expected_rate_cuts": "2",
-    "fed_change": "较前一日持平",
-    "asset_analysis": {
-        "美元指数DXY": "美元走弱利好风险资产",
-        "黄金": "避险情绪升温，金价突破关键阻力位",
-        "WTI原油": "油价震荡，OPEC+会议临近",
-        "比特币": "加密货币风险偏好回升"
-    },
-    "sectors_performance": [
-        {"rank": 1, "name": "信息技术", "etf": "XLK", "change": 2.3, "change_5d": 8.5, "change_1m": 15.2, "vs_sp500": "跑赢", "driver": "AI硬件需求强劲"},
-        {"rank": 2, "name": "可选消费", "etf": "XLY", "change": 1.8, "change_5d": 6.2, "change_1m": 12.8, "vs_sp500": "跑赢", "driver": "消费复苏预期"},
-        {"rank": 3, "name": "通信服务", "etf": "XLC", "change": 1.5, "change_5d": 5.8, "change_1m": 11.5, "vs_sp500": "跑赢", "driver": "科技巨头表现"},
-        {"rank": 4, "name": "金融", "etf": "XLF", "change": 0.8, "change_5d": 3.2, "change_1m": 7.5, "vs_sp500": "跑输", "driver": "利率环境敏感"},
-        {"rank": 5, "name": "工业", "etf": "XLI", "change": 0.5, "change_5d": 2.8, "change_1m": 6.9, "vs_sp500": "跑输", "driver": "经济数据平淡"},
-        {"rank": 6, "name": "医疗保健", "etf": "XLV", "change": 0.2, "change_5d": 1.5, "change_1m": 4.2, "vs_sp500": "跑输", "driver": "防御性板块"},
-        {"rank": 7, "name": "必需消费", "etf": "XLP", "change": -0.1, "change_5d": 0.8, "change_1m": 3.1, "vs_sp500": "跑输", "driver": "通胀压力"},
-        {"rank": 8, "name": "能源", "etf": "XLE", "change": -0.5, "change_5d": -1.2, "change_1m": 2.3, "vs_sp500": "跑输", "driver": "油价回调"},
-        {"rank": 9, "name": "公用事业", "etf": "XLU", "change": -0.3, "change_5d": -0.5, "change_1m": 1.8, "vs_sp500": "跑输", "driver": "防御性板块"},
-        {"rank": 10, "name": "材料", "etf": "XLB", "change": -0.4, "change_5d": -1.8, "change_1m": 0.9, "vs_sp500": "跑输", "driver": "周期性板块"},
-        {"rank": 11, "name": "房地产", "etf": "XLRE", "change": -0.6, "change_5d": -2.1, "change_1m": -0.5, "vs_sp500": "跑输", "driver": "利率敏感"}
-    ],
-    "sector_analysis": "成长股主导，防御性板块表现疲软，AI相关板块持续领涨",
-    "themes_performance": [
-        {"name": "半导体", "etf": "SMH/SOXX", "change": 3.2, "change_5d": 12.5, "change_1m": 25.8, "analysis": "AI硬件需求强劲，业绩超预期"},
-        {"name": "软件", "etf": "IGV", "change": 2.8, "change_5d": 10.2, "change_1m": 22.3, "analysis": "AI应用需求增长，估值修复"},
-        {"name": "网络安全", "etf": "CIBR/HACK", "change": 1.9, "change_5d": 8.7, "change_1m": 18.5, "analysis": "企业安全支出增加"},
-        {"name": "云计算", "etf": "CLOU/WCLD", "change": 2.1, "change_5d": 9.3, "change_1m": 20.1, "analysis": "云服务需求稳定增长"},
-        {"name": "AI/自动化", "etf": "BOTZ/AIQ", "change": 3.5, "change_5d": 14.2, "change_1m": 28.7, "analysis": "AI投资热潮延续"},
-        {"name": "小盘成长", "etf": "IWO", "change": 1.2, "change_5d": 5.6, "change_1m": 11.8, "analysis": "成长风格延续"},
-        {"name": "小盘价值", "etf": "IWN", "change": -0.3, "change_5d": -1.2, "change_1m": 2.3, "analysis": "价值风格疲软"},
-        {"name": "等权标普", "etf": "RSP", "change": 0.9, "change_5d": 4.1, "change_1m": 9.2, "analysis": "市场宽度改善"},
-        {"name": "大盘成长", "etf": "QQQ/SCHG", "change": 2.5, "change_5d": 11.3, "change_1m": 23.5, "analysis": "科技巨头领涨"},
-        {"name": "大盘价值", "etf": "VTV", "change": -0.1, "change_5d": -0.8, "change_1m": 3.7, "analysis": "价值风格落后"}
-    ],
-    "theme_analysis": "AI硬件继续主导，软件股补涨，小盘股参与度提升",
-    "ma_20_sp500": 65,
-    "ma_50_sp500": 72,
-    "ma_100_sp500": 78,
-    "ma_200_sp500": 82,
-    "ma_20_sp500_analysis": "20日均线参与度健康，未出现过度拥挤",
-    "ma_20_qqq": 68,
-    "ma_50_qqq": 75,
-    "ma_100_qqq": 80,
-    "ma_200_qqq": 85,
-    "ma_20_qqq_analysis": "纳指参与度高于标普，显示科技股强势",
-    "nyse_advance": 2450,
-    "nyse_decline": 1850,
-    "nyse_ratio": "1.32",
-    "nasdaq_advance": 2800,
-    "nasdaq_decline": 1600,
-    "nasdaq_ratio": "1.75",
-    "nyda_new_highs": 120,
-    "nyda_new_lows": 45,
-    "nasdaq_new_highs": 180,
-    "nasdaq_new_lows": 30,
-    "breadth_advance_analysis": "市场宽度改善，纳指领涨",
-    "breadth_decline_analysis": "下跌家数减少，恐慌情绪缓解",
-    "breadth_ratio_analysis": "涨跌比显示积极情绪",
-    "new_highs_analysis": "新高数量增加，显示趋势延续",
-    "new_lows_analysis": "新低数量正常，风险有限",
-    "technical_analysis": [
-        {"symbol": "SPY", "price": 744.78, "ma20": 730.5, "ma50": 720.2, "ma100": 710.8, "ma200": 700.1, "rsi": 68, "macd": "金叉", "support": "730", "resistance": "750"},
-        {"symbol": "QQQ", "price": 712.6, "ma20": 700.3, "ma50": 690.5, "ma100": 680.2, "ma200": 670.8, "rsi": 72, "macd": "金叉", "support": "700", "resistance": "720"},
-        {"symbol": "IWM", "price": 297.58, "ma20": 295.2, "ma50": 290.8, "ma100": 285.5, "ma200": 280.2, "rsi": 58, "macd": "死叉", "support": "290", "resistance": "300"},
-        {"symbol": "SMH", "price": 566.32, "ma20": 550.1, "ma50": 540.3, "ma100": 530.5, "ma200": 520.8, "rsi": 75, "macd": "金叉", "support": "550", "resistance": "580"},
-        {"symbol": "IGV", "price": 450.5, "ma20": 440.2, "ma50": 430.8, "ma100": 420.5, "ma200": 410.2, "rsi": 70, "macd": "金叉", "support": "440", "resistance": "460"}
-    ],
-    "technical_key_points": "SPY/QQQ处于超买区域，需关注回调风险；半导体板块RSI超买，可能面临获利了结",
-    "magnificent_7": [
-        {"symbol": "NVDA", "change_pct": -0.46, "reason": "财报后小幅回调", "technical": "处于历史高位", "watch": "关注50日均线支撑"},
-        {"symbol": "MSFT", "change_pct": 10.67, "reason": "AI产品发布超预期", "technical": "突破历史新高", "watch": "继续强势"},
-        {"symbol": "AAPL", "change_pct": 12.17, "reason": "iPhone 16预购强劲", "technical": "突破历史新高", "watch": "继续强势"},
-        {"symbol": "GOOGL", "change_pct": 4.71, "reason": "AI搜索增长", "technical": "接近历史新高", "watch": "关注阻力位"},
-        {"symbol": "AMZN", "change_pct": 6.9, "reason": "AWS云服务增长", "technical": "反弹至关键阻力位", "watch": "关注突破"},
-        {"symbol": "META", "change_pct": 7.37, "reason": "广告收入增长", "technical": "突破历史新高", "watch": "继续强势"},
-        {"symbol": "TSLA", "change_pct": 4.89, "reason": "电动车销量增长", "technical": "反弹至20日线", "watch": "关注50日线"}
-    ],
-    "ai_hardware": [
-        {"symbol": "AMD", "change_pct": 8.5, "reason": "AI芯片需求增长", "technical": "突破历史新高", "watch": "继续强势"},
-        {"symbol": "AVGO", "change_pct": 6.2, "reason": "数据中心芯片订单", "technical": "接近历史新高", "watch": "关注阻力位"},
-        {"symbol": "MRVL", "change_pct": 9.8, "reason": "AI芯片设计突破", "technical": "突破历史新高", "watch": "继续强势"},
-        {"symbol": "TSM", "change_pct": 5.3, "reason": "代工需求强劲", "technical": "反弹至20日线", "watch": "关注50日线"}
-    ],
-    "recent_earnings": [
-        {"company": "NVDA", "revenue": "超预期", "eps": "超预期", "beat_guidance": "是", "after_hours": 2.5, "analysis": "AI芯片需求超预期，指引上调"},
-        {"company": "MSFT", "revenue": "超预期", "eps": "超预期", "beat_guidance": "是", "after_hours": 8.3, "analysis": "Azure AI服务增长强劲"},
-        {"company": "AAPL", "revenue": "超预期", "eps": "超预期", "beat_guidance": "是", "after_hours": 6.7, "analysis": "iPhone 16预购火爆"}
-    ],
-    "upcoming_earnings": [
-        {"date": "2026-07-05", "company": "AMZN", "focus": "AWS云服务增长", "impact": "云计算板块"},
-        {"date": "2026-07-06", "company": "GOOGL", "focus": "AI搜索收入", "impact": "科技巨头"},
-        {"date": "2026-07-07", "company": "META", "focus": "广告收入", "impact": "社交媒体"}
-    ],
-    "institutional_views": [
-        {"institution": "高盛", "viewpoint": "上调标普500目标至5500点", "assets": "大盘科技股", "impact": "利好市场"},
-        {"institution": "摩根士丹利", "viewpoint": "AI硬件需求持续强劲", "assets": "半导体", "impact": "板块利好"}
-    ],
-    "market_state": "AI硬件主升浪",
-    "money_flow_in": "AI硬件、软件、半导体",
-    "money_flow_out": "能源、公用事业、防御性板块",
-    "main_line_analysis": "AI主线健康，软件股开始补涨，市场宽度扩散",
-    "focus_stocks": [
-        {"symbol": "NVDA", "change_pct": -0.46, "trend": "高位震荡", "news": "财报后小幅回调", "support": "180", "resistance": "200", "judgment": "回踩支撑"},
-        {"symbol": "MSFT", "change_pct": 10.67, "trend": "继续强势", "news": "AI产品发布", "support": "380", "resistance": "400", "judgment": "继续强势"},
-        {"symbol": "AAPL", "change_pct": 12.17, "trend": "继续强势", "news": "iPhone 16预购", "support": "300", "resistance": "320", "judgment": "继续强势"},
-        {"symbol": "AMD", "change_pct": 8.5, "trend": "继续强势", "news": "AI芯片需求", "support": "150", "resistance": "170", "judgment": "继续强势"},
-        {"symbol": "AVGO", "change_pct": 6.2, "trend": "高位震荡", "news": "数据中心订单", "support": "160", "resistance": "180", "judgment": "高位震荡"}
-    ],
-    "ten_yield_observation": "关注4.5%关键阻力位",
-    "dollar_observation": "美元指数走弱，利好风险资产",
-    "commodity_observation": "油价震荡，黄金突破关键位",
-    "fed_speech_observation": "关注FOMC官员讲话",
-    "economic_data_observation": "非农数据即将公布",
-    "spy_support": "730",
-    "spy_resistance": "750",
-    "qqq_support": "700",
-    "qqq_resistance": "720",
-    "smh_qqq_comparison": "SMH继续强于QQQ",
-    "sector_rotation_observation": "AI硬件继续领涨，软件补涨，防御板块走弱",
-    "tomorrow_watchlist": [
-        {"symbol": "NVDA", "reason": "财报后回调，关注支撑位"},
-        {"symbol": "MSFT", "reason": "突破新高，继续观察"},
-        {"symbol": "AMD", "reason": "AI芯片需求强劲"},
-        {"symbol": "AMZN", "reason": "AWS云服务增长"},
-        {"symbol": "GOOGL", "reason": "AI搜索收入增长"}
-    ],
-    "main_risk": "美债收益率上行压制估值，AI硬件可能面临获利了结",
-    "macro_rate_status": "上行",
-    "macro_risk_level": "中高",
-    "breadth_status": "改善",
-    "breadth_risk_level": "低",
-    "ai_crowding_status": "高",
-    "ai_crowding_risk_level": "中高",
-    "earnings_risk_status": "中等",
-    "earnings_risk_level": "中",
+    # 表格类：结构为空，等真实数据适配器填充；采集失败时留空表而非假数据
+    "sectors_performance": [],
+    "themes_performance": [],
+    "magnificent_7": [],
+    "ai_hardware": [],
+    "focus_stocks": [],
+    "technical_analysis": [],
+    "recent_earnings": [],
+    "upcoming_earnings": [],
+    "institutional_views": [],
 }
 
 
@@ -583,6 +705,18 @@ def generate_report(args=None):
     _fill_placeholders(report_data, _BREADTH_COUNT_FIELDS)
     _fill_placeholders(report_data, _BREADTH_ANALYSIS_FIELDS, _NO_REAL_TIME_ANALYSIS)
     _fill_placeholders(report_data, _MA_FIELDS)
+
+    # 14d. 其余章节全部由真实行情推导（盘中复盘/个股表/轮动/宏观观察/风险表）
+    _apply_real_session(report_data, data)
+    _apply_real_movers(report_data, data)
+    _apply_real_focus_stocks(report_data, data)
+    _apply_real_flows(report_data, data)
+    _apply_real_macro_observations(report_data, data)
+    _apply_real_risk_table(report_data, data)
+
+    # 14e. 无数据源章节 + LLM 未生成时的诚实占位（LLM 成功会覆盖结论文字）
+    _apply_no_source_placeholders(report_data)
+    _apply_llm_only_placeholders(report_data)
 
     # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
     _apply_llm_conclusions(report_data, today)
