@@ -87,6 +87,17 @@ class TestPrevClose:
         assert mdc._prev_close(near["chart"]["result"][0]["meta"], [90.0, 98.0, 100.0], None) == 98.0
         assert mdc._prev_close(far["chart"]["result"][0]["meta"], [90.0, 98.0, 100.0], None) == 100.0
 
+    def test_none_bar_keeps_timestamps_aligned(self):
+        # 序列里有 None 的 K 线时，时间戳必须同步下移；否则长度不等 →
+        # 走"≈现价"退化判断，日线滞后但数值巧合接近时会把上上交易日当昨收。
+        # 复现：AMZN 10/16=250.0, 10/19=262.45, 现价 262.63（日线只到 10/19）
+        data = _chart(262.63, [250.0, None, 262.45],
+                      timestamps=[_epoch("2026-10-16"), _epoch("2026-10-17"), _epoch("2026-10-19")],
+                      quote_ts=_epoch("2026-10-20") + 3600)
+        r = mdc._parse_chart(data, "AMZN")
+        assert r["prev_close"] == 262.45
+        assert r["change_pct"] == 0.07
+
     def test_change_5d_1m_end_at_current_price(self):
         # 日线滞后时区间涨跌仍以最新报价为终点
         closes = [80.0, 82.0, 84.0, 86.0, 88.0, 100.0]

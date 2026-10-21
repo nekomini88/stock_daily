@@ -268,6 +268,14 @@ def main():
     # 3. 分段
     chunks = split_chunks(full_text, _report_title(raw))
     print(f"✅ 分段完成: {len(chunks)} 段")
+    # 数据修正时的提示行（如 TG_NOTE="⚠️ 修正版：亚马逊日内涨幅已更正"），
+    # 放在首段开头而不是标题里——标题要留在正文里供 html_to_tg 定位。
+    note = os.environ.get("TG_NOTE", "").strip()
+    if note and chunks:
+        chunks[0] = f"<b>{note}</b>\n\n" + chunks[0]
+    # 清掉上一轮遗留的分段文件，避免块数变少时把旧块重复发出去
+    for stale in base_dir.glob("chunk_*.txt"):
+        stale.unlink()
     for i, c in enumerate(chunks, 1):
         p = base_dir / f"chunk_{i}.txt"
         p.write_text(c, encoding="utf-8")

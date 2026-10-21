@@ -159,10 +159,19 @@ def _parse_chart(data, symbol):
     result = data["chart"]["result"][0]
     meta = result["meta"]
     price = meta.get("regularMarketPrice", 0)
-    closes = [c for c in result.get("indicators", {}).get("quote", [{}])[0].get("close", []) if c]
-    timestamps = result.get("timestamp") or []
+    raw_closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", []) or []
+    raw_ts = result.get("timestamp") or []
+    # 过滤 None 时必须让时间戳同步下移，否则长度不等 → timestamps=None →
+    # 退化成"最后一根收盘价≈现价"判断，日线滞后但数值巧合接近时会把
+    # 上上交易日当成昨收（AMZN/AVGO/XLC/XLI 曾因此把 +0.07% 写成 +5.05%）
+    closes, timestamps = [], []
+    for i, c in enumerate(raw_closes):
+        if c:
+            closes.append(c)
+            if i < len(raw_ts):
+                timestamps.append(raw_ts[i])
     if len(timestamps) != len(closes):
-        timestamps = None  # 序列被过滤过，无法对齐时间戳
+        timestamps = None  # 真的无法对齐，才放弃时间戳判断
     if not closes:
         closes = [price]
     prev_close = _prev_close(meta, closes, timestamps)
