@@ -76,7 +76,7 @@ def _determine_bias(sp_chg, qq_chg, ru_chg, best_mag7, worst_sector, pct2) -> st
         bad += 1
     if best_mag7:
         good += 1
-    if worst_sector and pct2(worst_sector.get("change")) < -1.0:
+    if worst_sector and pct2(_chg(worst_sector) or 0) < -1.0:
         bad += 1
     if pct2(ru_chg or 0) > 0.5:
         good += 1
@@ -221,8 +221,11 @@ def analyze_session(data: Dict[str, Any]) -> Dict[str, Any]:
 
     rising_sectors = [s for s in sectors_performance if (_chg(s) or 0) > 0]
     falling_sectors = [s for s in sectors_performance if (_chg(s) or 0) < 0]
-    top_sector = _safe(rising_sectors, 0)
-    worst_sector = _safe(falling_sectors, 0)
+    # 领涨/领跌必须按涨跌幅极值取，不能取"声明顺序里第一个为正的"
+    # （板块按 rank 排序输出，第一个上涨的往往不是涨幅最大的：曾把 XLC +0.09%
+    # 写成"领涨板块"，而真实第一是 XLV +2.37%）
+    top_sector = max(rising_sectors, key=lambda s: _chg(s) or 0) if rising_sectors else None
+    worst_sector = min(falling_sectors, key=lambda s: _chg(s) or 0) if falling_sectors else None
 
     mag7_names = []
     for sym, row in mag7.items() if isinstance(mag7, dict) else []:

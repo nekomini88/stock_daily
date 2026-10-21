@@ -112,6 +112,56 @@ class TestPrevClose:
         assert {"AMD", "AVGO", "MRVL", "TSM", "MU"} <= set(mdc.AI_HARDWARE)
 
 
+# ── 无数据支撑的断言必须被剔除/校正 ──────────────────────────
+class TestClaimSanitizer:
+    """LLM 文字里的"创新高""涨跌家数"必须有数据支撑，否则改真值或剔除。"""
+
+    DATA_ALL_UP = {
+        "indices": {"Dow Jones": {"price": 52495.88, "pct_from_1y_high": -3.4}},
+        "sectors_performance": [
+            {"name": "医疗保健", "change_pct": 2.37},
+            {"name": "房地产", "change_pct": 1.7},
+            {"name": "信息技术", "change_pct": 0.2},
+        ],
+    }
+
+    def test_strip_new_high_claim_when_no_index_at_high(self):
+        text = "道指涨1.02%至52495.88创历史新高，标普500涨0.28%"
+        out = gsd._sanitize_llm_text(text, self.DATA_ALL_UP)
+        assert "历史新高" not in out
+        assert "52495.88" in out  # 真实数字保留
+
+    def test_keep_new_high_claim_when_index_really_at_high(self):
+        data = {"indices": {"Dow Jones": {"price": 55000.0, "pct_from_1y_high": 0.0}},
+                "sectors_performance": []}
+        text = "道指创历史新高"
+        assert gsd._sanitize_llm_text(text, data) == text
+
+    def test_breadth_count_reconciled_to_real_sectors(self):
+        text = "11个板块中8个上涨3个下跌，参与度均衡。"
+        out = gsd._sanitize_llm_text(text, self.DATA_ALL_UP)
+        assert "3个板块中3个上涨0个下跌" in out
+        assert "8个上涨" not in out
+
+    def test_money_flow_out_never_lists_rising_sectors(self):
+        rd = {}
+        gsd._apply_real_flows(rd, self.DATA_ALL_UP)
+        assert "信息技术(+0.20%)" not in rd["money_flow_out"]
+        assert rd["money_flow_out"] == "无板块下跌（全部收涨）"
+
+    def test_top_sector_is_max_not_first_rising(self):
+        # 板块按 rank 顺序给出，第一个上涨的（通信服务 +0.09%）不是领涨（医疗保健 +2.37%）
+        data = {"sectors_performance": [
+            {"name": "信息技术", "change_pct": -0.28},
+            {"name": "通信服务", "change_pct": 0.09},
+            {"name": "医疗保健", "change_pct": 2.37},
+        ]}
+        out = fc.analyze_session(data)
+        assert out is not None
+        top = (out.get("debug") or {}).get("top_sector")
+        assert top == "医疗保健"
+
+
 # ── 3/4. LLM provider 链 ────────────────────────────────────
 class TestLLMProviders:
     """provider 链：免费的 longcat 已下线，必须有可用的降级链"""

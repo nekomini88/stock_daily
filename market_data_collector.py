@@ -223,6 +223,27 @@ def fetch_yahoo(symbol):
         print(f"⚠️ {symbol} Stooq 源也失败: {e}", file=sys.stderr)
     return {"symbol": symbol, "error": "all sources failed"}
 
+def fetch_52w(symbol):
+    """一年内最高收盘价与日期（用于判定"创新高"类断言是否成立）。"""
+    for host in ("query1.finance.yahoo.com", "query2.finance.yahoo.com"):
+        url = f"https://{host}/v8/finance/chart/{symbol}?interval=1d&range=1y"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                result = json.loads(resp.read())["chart"]["result"][0]
+            ts = result.get("timestamp") or []
+            closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            bars = [(t, c) for t, c in zip(ts, closes) if c is not None]
+            if not bars:
+                return None
+            t, c = max(bars, key=lambda x: x[1])
+            return {"high_1y": round(c, 2),
+                    "high_1y_date": datetime.fromtimestamp(t, timezone.utc).date().isoformat()}
+        except Exception:
+            continue
+    return None
+
+
 def fetch_futures():
     """Get ES and NQ futures"""
     results = {}
@@ -266,6 +287,13 @@ def main():
         r = fetch_yahoo(sym)
         if "error" not in r:
             indices[name] = r
+    for name, item in indices.items():
+        h = fetch_52w(item.get("symbol") or "")
+        if h:
+            item.update(h)
+            price = item.get("price")
+            if price and h.get("high_1y"):
+                item["pct_from_1y_high"] = round((price / h["high_1y"] - 1) * 100, 2)
     output["indices"] = indices
 
     # 2. 七巨头 + 重点个股

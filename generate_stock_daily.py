@@ -4,6 +4,7 @@ import argparse
 import copy
 import json
 import datetime
+import re
 import sys
 
 
@@ -390,10 +391,14 @@ def _mover_rows(items):
 
 
 def _group_side(items, name_key):
-    """按当日涨跌排序分组，返回 (全部, 前三涨, 前三跌)。"""
+    """按当日涨跌排序分组，返回 (全部, 前三涨, 前三跌)。
+
+    "跌"必须是真跌：全线上涨时把涨幅最小的板块当"资金流出"是把上涨写成下跌
+    （曾出现"主要流出：工业(+0.07%)、通信服务(+0.09%)"）。
+    """
     ranked = [i for i in (items or []) if _num(i.get("change_pct")) is not None]
     top = sorted(ranked, key=lambda i: -i["change_pct"])[:3]
-    bottom = sorted(ranked, key=lambda i: i["change_pct"])[:3]
+    bottom = [i for i in sorted(ranked, key=lambda i: i["change_pct"]) if i["change_pct"] < 0][:3]
     label = lambda i: f"{i.get(name_key)}({i['change_pct']:+.2f}%)"
     return ranked, [label(i) for i in top], [label(i) for i in bottom]
 
@@ -437,21 +442,32 @@ def _apply_real_focus_stocks(report_data, data, limit=5):
     report_data["focus_stocks"] = [{**r, "judgment": _move_judgment(r["change_pct"])} for r in ranked]
 
 
+def _breadth_label(up, total):
+    """市场宽度档位与风险等级的唯一口径（§11 market_state 与 §14 breadth_status 共用）。"""
+    if not total:
+        return "暂无", "暂无"
+    if up <= 3:
+        return f"普跌（{up}/{total} 板块上涨）", "高"
+    if up >= total:
+        return f"普涨（{up}/{total} 板块上涨）", "低"
+    if up >= total - 1:
+        return f"接近普涨（{up}/{total} 板块上涨）", "中"
+    return f"分化（{up}/{total} 板块上涨）", "中高"
+
+
 def _apply_real_flows(report_data, data):
     """11.板块轮动：资金流向与市场状态按真实板块涨跌推导。"""
     ranked, top, bottom = _group_side(data.get("sectors_performance"), "name")
     if not ranked:
         return
-    report_data["money_flow_in"] = "、".join(top)
-    report_data["money_flow_out"] = "、".join(bottom)
+    report_data["money_flow_in"] = "、".join(top) or "暂无"
+    report_data["money_flow_out"] = "、".join(bottom) or "无板块下跌（全部收涨）"
     up = sum(1 for s in ranked if s["change_pct"] > 0)
     down = len(ranked) - up
-    if up <= 3:
-        state = "普跌调整"
-    elif up >= len(ranked) - 1:
-        state = "普涨行情"
-    else:
-        state = "分化震荡"
+    state = _breadth_label(up, len(ranked))[0].split("（")[0]
+    # 保留原有措辞（"普跌调整/普涨行情/分化震荡"），只统一阈值口径
+    state = {"普跌": "普跌调整", "普涨": "普涨行情", "分化": "分化震荡",
+             "接近普涨": "接近普涨"}.get(state, state)
     sp500 = _sp500_change(data)
     detail = f"，标普500 当日 {sp500:+.2f}%" if sp500 is not None else ""
     report_data["market_state"] = f"{state}：{len(ranked)} 大板块 {up} 涨 {down} 跌{detail}"
@@ -499,12 +515,7 @@ def _apply_real_risk_table(report_data, data):
     ranked, _, _ = _group_side(data.get("sectors_performance"), "name")
     if ranked:
         up = sum(1 for s in ranked if s["change_pct"] > 0)
-        if up <= 3:
-            report_data["breadth_status"], report_data["breadth_risk_level"] = f"偏空（{up}/{len(ranked)} 板块上涨）", "高"
-        elif up < len(ranked):
-            report_data["breadth_status"], report_data["breadth_risk_level"] = f"分化（{up}/{len(ranked)} 板块上涨）", "中高"
-        else:
-            report_data["breadth_status"], report_data["breadth_risk_level"] = f"普涨（{up}/{len(ranked)} 板块上涨）", "低"
+        report_data["breadth_status"], report_data["breadth_risk_level"] = _breadth_label(up, len(ranked))
 
     sox = (data.get("indices") or {}).get("半导体指数") or {}
     sox_1m, sp_1m = _num(sox.get("change_1m")), _num(((data.get("indices") or {}).get(_SP500_NAME) or {}).get("change_1m"))
@@ -613,7 +624,63 @@ _LLM_FIELD_MAP = {
 }
 
 
-def _apply_llm_conclusions(report_data, today):
+# 没有数据源的断言：一律不许 LLM 直接写进报告
+_NEW_HIGH_RE = re.compile(r"(?:创下|创出|刷新|突破|创)?(?:历史新高|历史高位|历史峰值|创纪录新高|新高)")
+
+
+def _index_1y_highs(data):
+    """{指数名: 距一年最高收盘价的百分比}（采集器 range=1y 算出的真实值）。"""
+    out = {}
+    for name, item in (data.get("indices") or {}).items():
+        if isinstance(item, dict) and _num(item.get("pct_from_1y_high")) is not None:
+            out[name] = _num(item["pct_from_1y_high"])
+    return out
+
+
+def _sanitize_llm_text(text, data):
+    """剔除 LLM 里没有数据支撑的硬断言（宁可少写，不可编造）。
+
+    ① "创历史新高"：报告没有 ATH 数据源，用采集器的"距一年最高收盘价"证伪。
+    ② 涨跌家数：板块口径由真实数据算出，LLM 写的数字与之矛盾就改回真值。
+    """
+    if not isinstance(text, str) or not text.strip():
+        return text
+    highs = _index_1y_highs(data)
+    at_high = bool(highs) and max(highs.values()) >= -0.1
+    if not at_high and _NEW_HIGH_RE.search(text):
+        def _drop(m, _t=text):
+            # 前面紧跟价格数字（"至52495.88创历史新高"）→ 整句删掉断言；
+            # 否则（"道指创新高"）换成"上涨"，避免留下断句
+            prev = _t[m.start() - 1] if m.start() else ""
+            nxt = _t[m.end()] if m.end() < len(_t) else ""
+            if nxt.isdigit() and prev == "%":
+                return "至"      # "涨1.02%创历史新高52495.88点" → "涨1.02%至52495.88点"
+            if prev.isdigit() or prev == "%":
+                return ""        # "至52495.88创历史新高，" → 直接删
+            return "上涨"        # "道指创新高" → "道指上涨"
+        text = _NEW_HIGH_RE.sub(_drop, text)
+        print("⚠️  已剔除无数据支撑的\"创新高\"表述（当日无指数处于一年高点）", file=sys.stderr)
+
+    sectors = [x for x in (data.get("sectors_performance") or [])
+               if isinstance(x, dict) and _num(x.get("change_pct")) is not None]
+    if sectors:
+        up = sum(1 for x in sectors if x["change_pct"] > 0)
+        down = len(sectors) - up
+        for pat, repl in (
+            (r"(\d+)\s*个板块中\s*(\d+)\s*个上涨\s*(\d+)\s*个下跌", lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌"),
+            (r"(\d+)\s*个上涨\s*(\d+)\s*个下跌", lambda m: f"{up}个上涨{down}个下跌"),
+        ):
+            m = re.search(pat, text)
+            if not m:
+                continue
+            if (int(m.group(1)), int(m.group(2))) != (up, down):
+                text = text.replace(m.group(0), repl(m))
+                print(f"⚠️  已校正 LLM 涨跌家数: {m.group(0)} → {repl(m)}", file=sys.stderr)
+            break
+    return text
+
+
+def _apply_llm_conclusions(report_data, today, data=None):
     """16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）。"""
     llm_file = Path(__file__).resolve().parent / "llm_data" / f"market_llm_{today}.json"
     if not llm_file.exists():
@@ -625,7 +692,7 @@ def _apply_llm_conclusions(report_data, today):
             for llm_key, field in _LLM_FIELD_MAP.items():
                 val = llm.get(llm_key)
                 if isinstance(val, str) and val.strip():
-                    report_data[field] = val.strip()
+                    report_data[field] = _sanitize_llm_text(val.strip(), data or {})
                     applied += 1
             print(f"🤖 LLM 结论已覆盖 {applied}/15 章")
     except Exception as e:
@@ -719,7 +786,7 @@ def generate_report(args=None):
     _apply_llm_only_placeholders(report_data)
 
     # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
-    _apply_llm_conclusions(report_data, today)
+    _apply_llm_conclusions(report_data, today, data)
 
     # 渲染并保存报告
     _render_and_save(template, report_data, today)
