@@ -143,6 +143,13 @@ class TestClaimSanitizer:
         assert "3个板块中3个上涨0个下跌" in out
         assert "8个上涨" not in out
 
+    def test_breadth_count_reconciled_when_comma_between_counts(self):
+        # 真实 LLM 输出常带逗号："11个板块中6个上涨，5个下跌"（2026-10-22 漏校正）
+        text = "11个板块中6个上涨，5个下跌，信息技术领涨，市场参与度一般。"
+        out = gsd._sanitize_llm_text(text, self.DATA_ALL_UP)
+        assert "3个板块中3个上涨0个下跌" in out
+        assert "6个上涨" not in out
+
     def test_money_flow_out_never_lists_rising_sectors(self):
         rd = {}
         gsd._apply_real_flows(rd, self.DATA_ALL_UP)

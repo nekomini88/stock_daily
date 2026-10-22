@@ -664,19 +664,21 @@ def _sanitize_llm_text(text, data):
     sectors = [x for x in (data.get("sectors_performance") or [])
                if isinstance(x, dict) and _num(x.get("change_pct")) is not None]
     if sectors:
-        up = sum(1 for x in sectors if x["change_pct"] > 0)
+        up = sum(1 for x in sectors if (_num(x["change_pct"]) or 0.0) > 0)
         down = len(sectors) - up
-        for pat, repl in (
-            (r"(\d+)\s*个板块中\s*(\d+)\s*个上涨\s*(\d+)\s*个下跌", lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌"),
-            (r"(\d+)\s*个上涨\s*(\d+)\s*个下跌", lambda m: f"{up}个上涨{down}个下跌"),
-        ):
-            m = re.search(pat, text)
-            if not m:
-                continue
-            if (int(m.group(1)), int(m.group(2))) != (up, down):
-                text = text.replace(m.group(0), repl(m))
-                print(f"⚠️  已校正 LLM 涨跌家数: {m.group(0)} → {repl(m)}", file=sys.stderr)
-            break
+        # LLM 会写成 "11个板块中6个上涨，5个下跌"，中间的逗号/顿号很常见，
+        # 旧正则不允许分隔符 → 静默不校正（与同份报告板块表自相矛盾）。
+        sep = r"\s*[，,、/和及与]?\s*"
+        full = re.compile(r"(\d+)\s*个板块中\s*(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
+                          r"(\d+)\s*个(?:下跌|收跌|走低|下降)")
+        short = re.compile(r"(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
+                           r"(\d+)\s*个(?:下跌|收跌|走低|下降)")
+        before = text
+        text = full.sub(lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌", text)
+        text = short.sub(lambda m: f"{up}个上涨{down}个下跌", text)
+        if text != before:
+            print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{up}个上涨{down}个下跌",
+                  file=sys.stderr)
     return text
 
 
