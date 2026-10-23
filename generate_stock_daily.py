@@ -679,6 +679,79 @@ def _sanitize_llm_text(text, data):
         if text != before:
             print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{up}个上涨{down}个下跌",
                   file=sys.stderr)
+
+    text = _sanitize_level_claims(text, data)
+    return text
+
+
+# 点位关口断言："纳指跌破26000点" 这类话必须能用真实价格/日内高低点验证。
+# 收盘未破但盘中破了 → 补"盘中"；两端都不成立 → 换成真实收盘点位。
+_LEVEL_NAMES = (
+    ("纳指100", "Nasdaq 100"), ("纳指", "Nasdaq 100"), ("纳斯达克", "Nasdaq 100"),
+    ("标普500", "S&P 500"), ("标普", "S&P 500"),
+    ("道指", "Dow Jones"), ("道琼斯", "Dow Jones"),
+    ("罗素2000", "Russell 2000"), ("费半", "半导体指数"), ("半导体指数", "半导体指数"),
+    ("VIX", "VIX"), ("恐慌指数", "VIX"),
+)
+_LEVEL_VERBS_BELOW = ("跌破", "失守", "下破", "击穿", "跌穿")
+_LEVEL_VERBS_ABOVE = ("突破", "站上", "升破", "涨破", "攻上")
+_LEVEL_RE = re.compile(
+    r"(?P<name>" + "|".join(re.escape(n) for n, _ in _LEVEL_NAMES) + r")"
+    r"\s*(?P<verb>" + "|".join(_LEVEL_VERBS_BELOW + _LEVEL_VERBS_ABOVE) + r")"
+    r"\s*(?P<level>\d[\d,]*(?:\.\d+)?)\s*点(?P<gate>关口)?"
+)
+
+
+def _index_by_name(data, canonical):
+    for name, item in (data.get("indices") or {}).items():
+        if name == canonical and isinstance(item, dict):
+            return item
+    return None
+
+
+def _sanitize_level_claims(text, data):
+    """校正无数据支撑的点位关口断言（收盘价优先，日内极值次之）。"""
+    if not isinstance(text, str) or not text.strip():
+        return text
+    alias = dict(_LEVEL_NAMES)
+    changes = []
+
+    def _fix(m):
+        canonical = alias.get(m.group("name"))
+        item = _index_by_name(data, canonical) if canonical else None
+        if not item:
+            return m.group(0)          # 没有该指数数据 → 不动，不改写
+        price = _num(item.get("price"))
+        try:
+            level = float(m.group("level").replace(",", ""))
+        except ValueError:
+            return m.group(0)
+        if price is None:
+            return m.group(0)
+        verb = m.group("verb")
+        gate = m.group("gate") or ""
+        extreme = _num(item.get("low")) if verb in _LEVEL_VERBS_BELOW else _num(item.get("high"))
+
+        if verb in _LEVEL_VERBS_BELOW:
+            if price < level:
+                return m.group(0)      # 收盘确已跌破
+            if extreme is not None and extreme < level:
+                changes.append(f"{m.group('name')}{verb}{m.group('level')}→盘中{verb}")
+                return f"{m.group('name')}盘中{verb}{m.group('level')}点{gate}"
+        else:
+            if price > level:
+                return m.group(0)      # 收盘确已站上
+            if extreme is not None and extreme > level:
+                changes.append(f"{m.group('name')}{verb}{m.group('level')}→盘中{verb}")
+                return f"{m.group('name')}盘中{verb}{m.group('level')}点{gate}"
+
+        # 收盘与日内极值都不支持该断言 → 退回真实收盘点位
+        changes.append(f"{m.group(0)}→{m.group('name')}收于{price:,.2f}点")
+        return f"{m.group('name')}收于{price:,.2f}点"
+
+    text = _LEVEL_RE.sub(_fix, text)
+    for c in changes:
+        print(f"⚠️  点位断言无数据支撑已校正：{c}", file=sys.stderr)
     return text
 
 

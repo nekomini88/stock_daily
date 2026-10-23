@@ -156,6 +156,42 @@ class TestClaimSanitizer:
         assert "信息技术(+0.20%)" not in rd["money_flow_out"]
         assert rd["money_flow_out"] == "无板块下跌（全部收涨）"
 
+    # ── 点位关口断言必须有真实价格支撑（2026-10-23 实测漏报）──────
+    DATA_LEVELS = {
+        "indices": {
+            "Nasdaq 100": {"price": 26008.86, "low": 25918.09, "high": 26359.41},
+            "S&P 500": {"price": 7663.43, "low": 7637.36, "high": 7702.94},
+            "VIX": {"price": 19.03, "low": 17.71, "high": 20.31},
+        },
+        "sectors_performance": [],
+    }
+
+    def test_level_claim_close_breaks_kept(self):
+        # 标普收盘 7663.43 确在 7700 下方 → 保留原话
+        text = "标普500跌破7700点关口，市场承压。"
+        assert gsd._sanitize_llm_text(text, self.DATA_LEVELS) == text
+
+    def test_level_claim_intraday_only_gets_qualified(self):
+        # 纳指收 26008.86 在 26000 上方，但盘中最低 25918.09 破了
+        text = "标普500跌破7700点关口，纳指跌破26000点，VIX突破20点关口。"
+        out = gsd._sanitize_llm_text(text, self.DATA_LEVELS)
+        assert "纳指盘中跌破26000点" in out
+        assert "VIX盘中突破20点关口" in out
+        assert "标普500跌破7700点" in out          # 已证实的断言不动
+        assert "纳指跌破26000点" not in out
+
+    def test_level_claim_unverified_falls_back_to_close(self):
+        data = {"indices": {"VIX": {"price": 18.2, "low": 17.1, "high": 18.4}},
+                "sectors_performance": []}
+        out = gsd._sanitize_llm_text("VIX突破20点关口，风险偏好回落。", data)
+        assert "VIX收于18.20点" in out
+        assert "突破" not in out
+
+    def test_level_claim_without_index_data_untouched(self):
+        text = "罗素2000跌破2700点。"
+        out = gsd._sanitize_llm_text(text, self.DATA_LEVELS)
+        assert out == text
+
     def test_top_sector_is_max_not_first_rising(self):
         # 板块按 rank 顺序给出，第一个上涨的（通信服务 +0.09%）不是领涨（医疗保健 +2.37%）
         data = {"sectors_performance": [
