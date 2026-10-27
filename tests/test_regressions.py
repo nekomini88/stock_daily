@@ -137,18 +137,57 @@ class TestClaimSanitizer:
         text = "道指创历史新高"
         assert gsd._sanitize_llm_text(text, data) == text
 
+    DATA_WITH_FLAT = {
+        "indices": {"Dow Jones": {"price": 52361.58, "pct_from_1y_high": -3.66}},
+        "sectors_performance": (
+            [{"name": f"涨{i}", "change_pct": 1.0} for i in range(7)]
+            + [{"name": f"跌{i}", "change_pct": -1.0} for i in range(3)]
+            + [{"name": "医疗保健", "change_pct": 0.0}]
+        ),
+    }
+
     def test_breadth_count_reconciled_to_real_sectors(self):
         text = "11个板块中8个上涨3个下跌，参与度均衡。"
         out = gsd._sanitize_llm_text(text, self.DATA_ALL_UP)
-        assert "3个板块中3个上涨0个下跌" in out
+        assert "3个板块中3个上涨、0个下跌" in out
         assert "8个上涨" not in out
 
     def test_breadth_count_reconciled_when_comma_between_counts(self):
         # 真实 LLM 输出常带逗号："11个板块中6个上涨，5个下跌"（2026-10-22 漏校正）
         text = "11个板块中6个上涨，5个下跌，信息技术领涨，市场参与度一般。"
         out = gsd._sanitize_llm_text(text, self.DATA_ALL_UP)
-        assert "3个板块中3个上涨0个下跌" in out
+        assert "3个板块中3个上涨、0个下跌" in out
         assert "6个上涨" not in out
+
+    def test_flat_sector_not_counted_as_down(self):
+        # 0.00% 的板块既不算涨也不算跌（旧版 down=len-up 把它写成"下跌"）
+        text = "11个板块中6个上涨，5个下跌"
+        out = gsd._sanitize_llm_text(text, self.DATA_WITH_FLAT)
+        assert "7个上涨、3个下跌、1个持平" in out
+        assert "4个下跌" not in out
+
+    def test_flat_tail_not_duplicated_across_wording(self):
+        # LLM 写成"1个收平"，尾部持平说法必须被吃掉，不能追加第二遍
+        for text in ("11个板块中7个上涨，3个下跌，1个收平",
+                     "11个板块中7个上涨、3个下跌、1个持平"):
+            out = gsd._sanitize_llm_text(text, self.DATA_WITH_FLAT)
+            assert out.count("持平") == 1, out
+
+    def test_breadth_sanitize_is_idempotent(self):
+        once = gsd._sanitize_llm_text("11个板块中6个上涨，5个下跌", self.DATA_WITH_FLAT)
+        twice = gsd._sanitize_llm_text(once, self.DATA_WITH_FLAT)
+        assert once == twice
+
+    def test_both_occurrences_corrected_in_one_pass(self):
+        # full 命中一处后不能整篇跳过 short（旧版 text==before 门禁的坑）
+        text = "11个板块中6个上涨，5个下跌。大盘6个上涨，5个下跌"
+        out = gsd._sanitize_llm_text(text, self.DATA_WITH_FLAT)
+        assert out.count("7个上涨、3个下跌、1个持平") == 2, out
+        assert "6个上涨" not in out
+
+    def test_abbrev_breadth_reconciled(self):
+        out = gsd._sanitize_llm_text("板块7涨3跌1平", self.DATA_WITH_FLAT)
+        assert "7个上涨、3个下跌、1个持平" in out
 
     def test_money_flow_out_never_lists_rising_sectors(self):
         rd = {}
@@ -241,6 +280,12 @@ class TestLLMProviders:
                                        return_value=(json.dumps({"summary": "x"}), "fb-model")):
                     parsed, provider = glc.generate_conclusions({}, max_retries=1)
         assert parsed == {} and provider == ""
+
+    def test_parse_json_rejects_non_dict(self):
+        # 弱模型爱吐数组/裸串，返回 None 之外的东西会让下游 .get() 抛 AttributeError
+        assert glc._parse_json('["a", "b"]') == {}
+        assert glc._parse_json('"just a string"') == {}
+        assert glc._parse_json('```json\n{"summary": "x"}\n```') == {"summary": "x"}
 
     def test_complete_output_accepted(self):
         full = json.dumps({k: "文字" for k in glc.LLM_KEYS})

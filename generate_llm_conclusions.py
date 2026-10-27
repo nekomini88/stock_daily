@@ -198,13 +198,16 @@ def _call_free_llm(sys_prompt: str, usr_prompt: str) -> tuple[str, str]:
     HTTP 直连 provider 全部 402/429 时（2026-10-27 实测 z.ai 限流 + openrouter 欠费），
     这是唯一还能出稿的路径。返回 (content, provider_name)，失败返回 ("", "")。
     """
-    sys.path.insert(0, "/root/.hermes/scripts")
+    fb_dir = "/root/.hermes/scripts"
+    if fb_dir not in sys.path:
+        sys.path.append(fb_dir)  # append 而非 insert(0)：该目录有同名陈旧副本，别劫持后续导入
     try:
         from free_llm import complete  # type: ignore
     except Exception as e:
         print(f"[WARN] free_llm 不可用: {e}", file=sys.stderr)
         return "", ""
     try:
+        # 免费链自带多家 HTTP+CLI 降级，单次失败就够久了；attempts=1 避免把日报拖到半小时后
         text, provider = complete(
             [
                 {"role": "system", "content": sys_prompt},
@@ -250,13 +253,10 @@ def generate_conclusions(data: dict, max_retries=2):
             print(f"[WARN] {provider['name']} 仅覆盖 {covered}/15 章，尝试下一个源", file=sys.stderr)
             break
 
-    # 兜底：直连 provider 全部失败 → 本机免费模型链
-    for attempt in range(max_retries):
-        content, fb_name = _call_free_llm(SYSTEM_PROMPT, usr_prompt)
-        if not content:
-            if attempt < max_retries - 1:
-                time.sleep(5)
-            continue
+    # 兜底：直连 provider 全部失败 → 本机免费模型链。只试一次：
+    # free_llm 内部已按多家 HTTP + CLI 降级，每轮可达数分钟，重试会把 08:00 的日报拖到很晚。
+    content, fb_name = _call_free_llm(SYSTEM_PROMPT, usr_prompt)
+    if content:
         parsed = _parse_json(content)
         covered = sum(
             1 for k in LLM_KEYS
@@ -265,7 +265,6 @@ def generate_conclusions(data: dict, max_retries=2):
         if covered >= MIN_SECTIONS:
             return parsed, fb_name
         print(f"[WARN] {fb_name} 仅覆盖 {covered}/15 章", file=sys.stderr)
-        break
     return {}, ""
 
 
@@ -279,14 +278,16 @@ def _parse_json(content: str) -> dict:
         if m:
             content = m.group(1).strip()
     try:
-        return json.loads(content)
+        loaded = json.loads(content)
+        return loaded if isinstance(loaded, dict) else {}
     except Exception:
         # 尝试提取第一个 { ... } 平衡块
         import re
         m = re.search(r"\{.*\}", content, re.DOTALL)
         if m:
             try:
-                return json.loads(m.group(0))
+                loaded = json.loads(m.group(0))
+                return loaded if isinstance(loaded, dict) else {}
             except Exception:
                 pass
     # LLM 输出无法解析为 JSON → 空结论 (记录原文便于排障)

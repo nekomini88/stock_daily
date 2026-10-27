@@ -668,23 +668,29 @@ def _sanitize_llm_text(text, data):
         down = sum(1 for x in sectors if (_num(x["change_pct"]) or 0.0) < 0)
         flat = len(sectors) - up - down
         # 持平板块既不算涨也不算跌：按 len-up 算 down 会把 0.00% 的板块写成"下跌"
-        tail = f"{flat}个持平" if flat else ""
+        tail = f"、{flat}个持平" if flat else ""
+        canonical = f"{up}个上涨、{down}个下跌{tail}"
         # LLM 会写成 "11个板块中6个上涨，5个下跌"，中间的逗号/顿号很常见，
         # 旧正则不允许分隔符 → 静默不校正（与同份报告板块表自相矛盾）。
         sep = r"\s*[，,、/和及与]?\s*"
-        # 末尾可选的"N个持平"也要吃掉：否则已带持平的文本会被重复追加 tail
-        fl = r"(?:" + sep + r"\d+\s*个(?:持平|平盘))?"
-        full = re.compile(r"(\d+)\s*个板块中\s*(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
-                          r"(\d+)\s*个(?:下跌|收跌|走低|下降)" + fl)
-        short = re.compile(r"(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
-                           r"(\d+)\s*个(?:下跌|收跌|走低|下降)" + fl)
+        # 尾部已存在的持平说法必须一并吃掉，否则会重复追加（"…1个持平、1个持平"）；
+        # 措辞覆盖 持平/平盘/收平/走平，"个/家"两种量词都要认。
+        fl = r"(?:" + sep + r"\d+\s*[个家](?:持平|平盘|收平|走平))?"
+        # 先跑 short 再跑 full：short 只吃数字段，命中后文本已变成规范形，
+        # 不会把 full 的产物再改一遍（旧版用 text==before 门禁，
+        # 导致 full 命中一处就整篇跳过 short，同一段第二处家数漏校正、且非幂等）。
+        short = re.compile(r"(\d+)\s*[个家](?:板块)?(?:上涨|收涨|走高|上升)" + sep +
+                           r"(\d+)\s*[个家](?:板块)?(?:下跌|收跌|走低|下降)" + fl)
+        full = re.compile(r"(\d+)\s*个板块中\s*(\d+)\s*[个家](?:上涨|收涨|走高|上升)" + sep +
+                          r"(\d+)\s*[个家](?:下跌|收跌|走低|下降)" + fl)
+        # 缩写写法 "7涨3跌1平"（不带量词/动词）也认，否则静默漏校正
+        abbrev = re.compile(r"(\d+)\s*涨\s*(\d+)\s*跌(?:\s*(\d+)\s*平)?")
         before = text
-        text = full.sub(lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌{tail}", text)
-        if text == before:
-            # full 未命中才跑 short，否则 short 会在刚生成的"X个上涨Y个下跌"上再追加一次 tail
-            text = short.sub(lambda m: f"{up}个上涨{down}个下跌{tail}", text)
+        text = short.sub(lambda m: canonical, text)
+        text = full.sub(lambda m: f"{len(sectors)}个板块中{canonical}", text)
+        text = abbrev.sub(lambda m: canonical, text)
         if text != before:
-            print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{up}个上涨{down}个下跌{tail}",
+            print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{canonical}",
                   file=sys.stderr)
 
     text = _sanitize_level_claims(text, data)
