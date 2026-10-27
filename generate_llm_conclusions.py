@@ -192,6 +192,33 @@ def _call_provider(provider: dict, api_key: str, sys_prompt: str, usr_prompt: st
         return ""
 
 
+def _call_free_llm(sys_prompt: str, usr_prompt: str) -> tuple[str, str]:
+    """兜底源：本机免费模型链（free_llm.complete，走 opencode CLI / space-bunny-free）。
+
+    HTTP 直连 provider 全部 402/429 时（2026-10-27 实测 z.ai 限流 + openrouter 欠费），
+    这是唯一还能出稿的路径。返回 (content, provider_name)，失败返回 ("", "")。
+    """
+    sys.path.insert(0, "/root/.hermes/scripts")
+    try:
+        from free_llm import complete  # type: ignore
+    except Exception as e:
+        print(f"[WARN] free_llm 不可用: {e}", file=sys.stderr)
+        return "", ""
+    try:
+        text, provider = complete(
+            [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": usr_prompt},
+            ],
+            max_tokens=MAX_TOKENS,
+            json_mode=True,
+        )
+        return (text or "").strip(), provider or "free_llm"
+    except Exception as e:
+        print(f"[WARN] free_llm 调用失败: {e}", file=sys.stderr)
+        return "", ""
+
+
 def generate_conclusions(data: dict, max_retries=2):
     """按 provider 链生成 15 条结论。
 
@@ -222,6 +249,23 @@ def generate_conclusions(data: dict, max_retries=2):
                 return parsed, provider["name"]
             print(f"[WARN] {provider['name']} 仅覆盖 {covered}/15 章，尝试下一个源", file=sys.stderr)
             break
+
+    # 兜底：直连 provider 全部失败 → 本机免费模型链
+    for attempt in range(max_retries):
+        content, fb_name = _call_free_llm(SYSTEM_PROMPT, usr_prompt)
+        if not content:
+            if attempt < max_retries - 1:
+                time.sleep(5)
+            continue
+        parsed = _parse_json(content)
+        covered = sum(
+            1 for k in LLM_KEYS
+            if isinstance(parsed.get(k), str) and str(parsed.get(k)).strip()
+        )
+        if covered >= MIN_SECTIONS:
+            return parsed, fb_name
+        print(f"[WARN] {fb_name} 仅覆盖 {covered}/15 章", file=sys.stderr)
+        break
     return {}, ""
 
 

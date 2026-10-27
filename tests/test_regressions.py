@@ -221,7 +221,25 @@ class TestLLMProviders:
     def test_incomplete_output_rejected(self):
         with mock.patch.object(glc, "load_env_keys", return_value={"GLM_API_KEY": "k"}):
             with mock.patch.object(glc, "_call_provider", return_value=json.dumps({"summary": "x"})):
-                parsed, provider = glc.generate_conclusions({}, max_retries=1)
+                with mock.patch.object(glc, "_call_free_llm", return_value=("", "")):
+                    parsed, provider = glc.generate_conclusions({}, max_retries=1)
+        assert parsed == {} and provider == ""
+
+    def test_free_llm_fallback_used_when_http_dead(self):
+        """HTTP 链全挂（429/402）时须走本机免费模型链，而不是直接空手兜底。"""
+        full = json.dumps({k: "文字" for k in glc.LLM_KEYS})
+        with mock.patch.object(glc, "load_env_keys", return_value={"GLM_API_KEY": "k"}):
+            with mock.patch.object(glc, "_call_provider", return_value=""):
+                with mock.patch.object(glc, "_call_free_llm", return_value=(full, "fb-model")):
+                    parsed, provider = glc.generate_conclusions({}, max_retries=1)
+        assert len(parsed) == 15 and provider == "fb-model"
+
+    def test_free_llm_fallback_partial_still_rejected(self):
+        with mock.patch.object(glc, "load_env_keys", return_value={"GLM_API_KEY": "k"}):
+            with mock.patch.object(glc, "_call_provider", return_value=""):
+                with mock.patch.object(glc, "_call_free_llm",
+                                       return_value=(json.dumps({"summary": "x"}), "fb-model")):
+                    parsed, provider = glc.generate_conclusions({}, max_retries=1)
         assert parsed == {} and provider == ""
 
     def test_complete_output_accepted(self):

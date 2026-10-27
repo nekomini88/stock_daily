@@ -665,19 +665,26 @@ def _sanitize_llm_text(text, data):
                if isinstance(x, dict) and _num(x.get("change_pct")) is not None]
     if sectors:
         up = sum(1 for x in sectors if (_num(x["change_pct"]) or 0.0) > 0)
-        down = len(sectors) - up
+        down = sum(1 for x in sectors if (_num(x["change_pct"]) or 0.0) < 0)
+        flat = len(sectors) - up - down
+        # 持平板块既不算涨也不算跌：按 len-up 算 down 会把 0.00% 的板块写成"下跌"
+        tail = f"{flat}个持平" if flat else ""
         # LLM 会写成 "11个板块中6个上涨，5个下跌"，中间的逗号/顿号很常见，
         # 旧正则不允许分隔符 → 静默不校正（与同份报告板块表自相矛盾）。
         sep = r"\s*[，,、/和及与]?\s*"
+        # 末尾可选的"N个持平"也要吃掉：否则已带持平的文本会被重复追加 tail
+        fl = r"(?:" + sep + r"\d+\s*个(?:持平|平盘))?"
         full = re.compile(r"(\d+)\s*个板块中\s*(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
-                          r"(\d+)\s*个(?:下跌|收跌|走低|下降)")
+                          r"(\d+)\s*个(?:下跌|收跌|走低|下降)" + fl)
         short = re.compile(r"(\d+)\s*个(?:上涨|收涨|走高|上升)" + sep +
-                           r"(\d+)\s*个(?:下跌|收跌|走低|下降)")
+                           r"(\d+)\s*个(?:下跌|收跌|走低|下降)" + fl)
         before = text
-        text = full.sub(lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌", text)
-        text = short.sub(lambda m: f"{up}个上涨{down}个下跌", text)
+        text = full.sub(lambda m: f"{len(sectors)}个板块中{up}个上涨{down}个下跌{tail}", text)
+        if text == before:
+            # full 未命中才跑 short，否则 short 会在刚生成的"X个上涨Y个下跌"上再追加一次 tail
+            text = short.sub(lambda m: f"{up}个上涨{down}个下跌{tail}", text)
         if text != before:
-            print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{up}个上涨{down}个下跌",
+            print(f"⚠️  已校正 LLM 涨跌家数 → {len(sectors)}个板块中{up}个上涨{down}个下跌{tail}",
                   file=sys.stderr)
 
     text = _sanitize_level_claims(text, data)
