@@ -462,6 +462,9 @@ def _apply_real_flows(report_data, data):
         return
     report_data["money_flow_in"] = "、".join(top) or "暂无"
     report_data["money_flow_out"] = "、".join(bottom) or "无板块下跌（全部收涨）"
+    # 全市场收跌时不存在"资金流入"：标签改为抗跌口径，避免把"跌得少"写成"流入"
+    any_up = any(_num(i.get("change_pct")) and i["change_pct"] > 0 for i in ranked)
+    report_data["money_flow_in_label"] = "主要流入" if any_up else "相对抗跌（跌幅最小，非资金净流入）"
     up = sum(1 for s in ranked if s["change_pct"] > 0)
     down = len(ranked) - up
     state = _breadth_label(up, len(ranked))[0].split("（")[0]
@@ -637,6 +640,26 @@ def _index_1y_highs(data):
     return out
 
 
+_A_SHARE_TERMS = (
+    ("申万十一大板块", "美股 11 大板块"),
+    ("申万一级行业", "美股 GICS 一级行业"),
+    ("申万行业", "GICS 行业"),
+    ("申万", "GICS"),
+    ("主力资金", "资金"),
+)
+
+
+def _normalize_us_terms(text):
+    """把 LLM 串进来的 A 股口径改成美股口径（报告写的是标普/GICS 板块）。"""
+    if not isinstance(text, str):
+        return text
+    for bad, good in _A_SHARE_TERMS:
+        if bad in text:
+            text = text.replace(bad, good)
+            print(f'⚠️  已改写 A 股术语「{bad}」→「{good}」', file=sys.stderr)
+    return text
+
+
 def _sanitize_llm_text(text, data):
     """剔除 LLM 里没有数据支撑的硬断言（宁可少写，不可编造）。
 
@@ -645,6 +668,7 @@ def _sanitize_llm_text(text, data):
     """
     if not isinstance(text, str) or not text.strip():
         return text
+    text = _normalize_us_terms(text)
     highs = _index_1y_highs(data)
     at_high = bool(highs) and max(highs.values()) >= -0.1
     if not at_high and _NEW_HIGH_RE.search(text):

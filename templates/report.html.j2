@@ -13,8 +13,8 @@
             --text-main: #1a1a1a;
             --text-muted: #5c5c5c;
             --accent: #2d6a4f;
-            --accent-2: #3a7d5e;
-            --danger: #c0392b;
+            --accent-2: #357356;
+            --danger: #bc382a;
             --warn: #b8860b;
             --info: #2471a3;
         }
@@ -24,7 +24,7 @@
         }
 
         body {
-            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans SC", sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, "Noto Sans SC", sans-serif;
             line-height: 1.7;
             margin: 0;
             padding: 24px;
@@ -40,7 +40,7 @@
         }
 
         .hero {
-            background: linear-gradient(135deg, #2d6a4f, #3a7d5e);
+            background: linear-gradient(135deg, #2d6a4f, #357356);
             color: #fff;
             border-radius: 18px;
             padding: 28px 32px;
@@ -227,15 +227,35 @@
             font-size: 0.95rem;
         }
 
+        /* ---- 作者署名 ---- */
+        .author-badge { display: inline-flex; align-items: center; text-decoration: none; }
+        .author-badge__avatar { display: block; width: 38px; height: 38px; border-radius: 50%; overflow: hidden;
+            background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.10), 0 1px 3px rgba(0,0,0,.14); }
+        .author-badge__avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .hero .author-badge { margin-bottom: 12px; }
+        .nk-copy { margin-top: 6px; font-size: 12px; letter-spacing: .01em; opacity: .82; }
+        @media (max-width: 520px) { .author-badge__avatar { width: 32px; height: 32px; } }
+
+
         .footer p {
             margin: 3px 0;
         }
-    </style>
+    
+/* 窄屏表格横向滚动（日报里的数据表在 390px 会顶出视口） */
+@media (max-width: 560px) {
+    table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+.hero h1 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hero h1 .author-badge { flex: 0 0 auto; }
+@media (max-width: 560px) { .hero h1 { gap: 9px; } }
+</style>
 </head>
 <body>
     <div class="container">
         <div class="hero">
-            <h1>📈 美股收盘日报｜{{ data.date }}</h1>
+            
+            <h1><a class="author-badge" href="https://nekomini520.com/" target="_blank" rel="noopener" title="Nekomini · 作者" aria-label="Nekomini · 作者"><span class="author-badge__avatar"><img src="/author-badge.jpg" srcset="/author-badge.jpg 160w, /author-badge@2x.jpg 320w" sizes="38px" width="38" height="38" alt="Nekomini" decoding="async"></span></a>📈 美股收盘日报｜{{ data.date }}</h1>
             <p>专业、简洁、高信息密度 · 每日10分钟掌握美股核心动态</p>
         </div>
 
@@ -275,7 +295,7 @@
                             {% if index.change_pct > 0 %}+{% endif %}{{ index.change_pct|round(2) }}%
                         </td>
                         <td>{{ index.low|round(2) }} - {{ index.high|round(2) }}</td>
-                        <td>{{ index.volume|compact }}</td>
+                        <td>{% if index.volume %}{{ index.volume|compact }}{% else %}暂无{% endif %}</td>
                         <td>{{ technical_status(name, index) }}</td>
                     </tr>
                     {% endif %}
@@ -289,9 +309,9 @@
         <div class="section">
             <h2>⏰ 2.盘中走势复盘</h2>
             <div class="timeline">
-                <h4>📈 日内数据（来自日线行情，无分时数据源）：</h4>
+                <h3>📈 日内数据（来自日线行情，无分时数据源）：</h3>
                 <div class="card">
-                    <h5>📉 日内最低</h5>
+                    <h4>📉 日内最低</h4>
                     <p>{{ pre_market }}</p>
                 </div>
                 <div class="card">
@@ -421,7 +441,7 @@
                 </tbody>
             </table>
             <div class="highlight">
-                <h4>🎯 板块分析：</h4>
+                <h3>🎯 板块分析：</h3>
                 <p>{{ sector_analysis }}</p>
             </div>
         </div>
@@ -457,7 +477,7 @@
                 </tbody>
             </table>
             <div class="highlight">
-                <h4>🔍 主题分析：</h4>
+                <h3>🔍 主题分析：</h3>
                 <p>{{ theme_analysis }}</p>
             </div>
         </div>
@@ -583,7 +603,7 @@
                 </tbody>
             </table>
             <div class="highlight">
-                <h4>🎯 技术要点：</h4>
+                <h3>🎯 技术要点：</h3>
                 <p>{{ technical_key_points }}</p>
             </div>
         </div>
@@ -735,12 +755,12 @@
         <div class="section">
             <h2>🎯 11.板块轮动判断</h2>
             <div class="highlight">
-                <h4>当前市场状态：</h4>
+                <h3>当前市场状态：</h3>
                 <p>{{ market_state }}</p>
             </div>
             <div class="card">
                 <h4>📊 资金流向：</h4>
-                <p><strong>主要流入：</strong>{{ money_flow_in }}</p>
+                <p><strong>{{ money_flow_in_label|default("主要流入", true) }}：</strong>{{ money_flow_in }}</p>
                 <p><strong>主要流出：</strong>{{ money_flow_out }}</p>
             </div>
             <div class="card">
@@ -803,7 +823,7 @@
         <div class="section">
             <h2>⚠️14.风险提示</h2>
             <div class="warning">
-                <h4>当前市场最大风险：</h4>
+                <h3>当前市场最大风险：</h3>
                 <p>{{ main_risk }}</p>
             </div>
             <table>
@@ -852,7 +872,7 @@
         <div class="section">
             <h2>🎯 15.最终结论</h2>
             <div class="summary-box">
-                <h4>📈 今日市场结论</h4>
+                <h3>📈 今日市场结论</h3>
                 <p>{{ market_conclusion }}</p>
             </div>
             <div class="card">
@@ -864,7 +884,7 @@
                 <p>{{ trading_bias }}</p>
             </div>
             <div class="success">
-                <h4>🎯 最值得关注的5个信号</h4>
+                <h4>🎯 最值得关注的信号</h4>
                 <ul>
                     {% for signal in key_signals %}
                     <li>{{ signal }}</li>
@@ -876,6 +896,7 @@
         <div class="footer">
             <p>📊 Data Source：Yahoo Finance | 📧 Created by：Nekomini Bot | 📅 {{ generated_at }}（北京时间UTC+8）</p>
             <p>power by Nekomini</p>
+            <p class="nk-copy">© 2026 Nekomini</p>
         </div>
     </div>
 </body>
