@@ -39,9 +39,9 @@ mkdir -p index
 cp -f "$HTML_FILE" "index/index.html"
 echo "✅ 已同步到 index/index.html"
 
-# 发布到线上（绿云 /data/sites/stock）
+# 立即同步到线上（复用 core_static_sync.sh；crontab 每 10 分钟也会跑一次）
 echo "🚀 发布到线上..."
-python3 deploy_site.py || echo "⚠️ 发布失败，日报已生成但未上线，稍后手动跑 deploy_site.py"
+bash /root/.hermes/scripts/core_static_sync.sh || echo "⚠️ 同步失败，稍后由 10 分钟一次的同步任务补发"
 
 # 3. 生成 TXT 分段文件并发送到 Telegram 频道
 echo "=== 发送到 Telegram ==="
