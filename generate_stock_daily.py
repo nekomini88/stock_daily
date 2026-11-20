@@ -10,6 +10,12 @@ import sys
 
 # ===== 常量 =====
 # 报告路径/时间
+_SITE_DIR = Path("/root/stock_daily/index")          # 部署目录：首页 + 归档
+_SITE_URL = "https://stock.nekomini520.com"
+_SITE_NAME = "美股收盘日报"
+sys.path.insert(0, "/root/.hermes/scripts")
+from daily_report_site import session_date as _session_date, write_site_meta as _write_site_meta  # noqa: E402
+
 _REPORT_OUTPUT_DIR = Path("/root/stock_daily/files")
 _REPORT_TZ = datetime.timezone(datetime.timedelta(hours=8))  # 北京时间
 _DATE_FMT = "%Y-%m-%d"
@@ -243,6 +249,7 @@ def _load_template():
     env.filters['number_format'] = number_format
     env.filters['compact'] = compact_number
     env.filters['round'] = round_value
+    env.globals['ok'] = lambda v: bool(v) and not _is_placeholder(v)   # 模板里判「这段有没有内容」
     env.globals['technical_status'] = technical_status
     env.globals['bond_meaning'] = bond_analysis
     env.globals['asset_meaning'] = asset_analysis
@@ -301,8 +308,8 @@ _SYMBOL_ALIAS = {
 }
 
 # 无数据源 / LLM 未生成时的诚实占位（绝不写假数字）
-_LLM_MISSING = "暂无（当日 LLM 分析未生成）"
-_NO_SOURCE = "暂无（采集器未接入该数据源）"
+_LLM_MISSING = ""
+_NO_SOURCE = ""
 
 
 def _num(value):
@@ -538,23 +545,13 @@ def _apply_real_risk_table(report_data, data):
 
 
 def _apply_no_source_placeholders(report_data):
-    """无数据源章节：明确标注暂无，不留编造内容。"""
-    report_data["fed_rate_cut_probability"] = _NO_SOURCE
-    report_data["expected_rate_cuts"] = _NO_SOURCE
-    report_data["fed_change"] = _NO_SOURCE
-    report_data["fed_speech_observation"] = _NO_SOURCE
-    report_data["earnings_risk_level"] = _NO_SOURCE
-    report_data["recent_earnings"] = [
-        {"company": _NO_SOURCE, "revenue": _NO_SOURCE, "eps": _NO_SOURCE,
-         "beat_guidance": _NO_SOURCE, "after_hours": _NO_SOURCE, "analysis": _NO_SOURCE},
-    ]
-    report_data["upcoming_earnings"] = [
-        {"date": _NO_SOURCE, "company": _NO_SOURCE, "focus": _NO_SOURCE, "impact": _NO_SOURCE},
-    ]
-    report_data["institutional_views"] = [
-        {"institution": _NO_SOURCE, "viewpoint": _NO_SOURCE,
-         "assets": _NO_SOURCE, "impact": _NO_SOURCE},
-    ]
+    """无数据源的字段一律不写。
+
+    历史版本在这里塞「暂无（采集器未接入该数据源）」，结果整份报告出现 85 处「暂无」，
+    还把工程内部话术印给读者。通行做法是：没有数据的板块/字段直接从报告里摘掉
+    （Fed 降息预期、财报日历、机构观点与资金流三个板块已在模板里删除）。
+    """
+    return
 
 
 def _apply_llm_only_placeholders(report_data):
@@ -563,7 +560,11 @@ def _apply_llm_only_placeholders(report_data):
 
 
 def _build_technical_rows(data):
-    """15a. 用真实指数价格构造技术面表（MA/RSI/MACD 标注暂无）；无有效行返回 None。"""
+    """15a. 用真实指数价格构造技术面表。
+
+    只出真实字段（价格 / 当日涨跌 / 日内高低）。MA、RSI、MACD 需要日线历史，
+    采集源（Yahoo 盘后快照）没有，所以留 None 让模板整列不渲染，不再写「暂无」。
+    """
     rows = []
     for idx_name, idx in (data.get("indices") or {}).items():
         if not isinstance(idx, dict) or "error" in idx:
@@ -578,9 +579,9 @@ def _build_technical_rows(data):
             "price": price,
             "change_pct": idx.get("change_pct"),
             "ma20": None, "ma50": None, "ma100": None, "ma200": None,
-            "rsi": "暂无", "macd": "暂无",
-            "support": f"{lo:.2f}" if lo else "暂无",
-            "resistance": f"{hi:.2f}" if hi else "暂无",
+            "low": lo or None,
+            "high": hi or None,
+            "rsi": None, "macd": None,
         })
     return rows or None
 
@@ -811,19 +812,71 @@ def _apply_llm_conclusions(report_data, today, data=None):
         print(f"⚠️  LLM 结论加载失败，继续使用原有数据: {e}", file=sys.stderr)
 
 
+_PLACEHOLDER_HINTS = ("暂无", "未接入", "采集器未接入", "N/A")
+
+
+def _is_placeholder(v):
+    return isinstance(v, str) and any(h in v for h in _PLACEHOLDER_HINTS)
+
+
+def _sanitize_placeholders(report_data):
+    """把没数据的字段与整行摘掉，绝不让「暂无」这种工程话术印给读者。
+
+    - 标量/文本字段：整段置空（模板里有对应的判空，空就不渲染这一段）
+    - 字典列表：任一单元格是占位 → 整行删掉（半行「暂无」比没有更伤可信度）
+    - 字符串列表（要点/清单）：含占位的条目删掉
+    """
+    for k, v in list(report_data.items()):
+        if k == "data":
+            continue
+        if _is_placeholder(v):
+            report_data[k] = ""
+        elif isinstance(v, list) and v:
+            if isinstance(v[0], dict):
+                kept = []
+                for row in v:
+                    if any(_is_placeholder(x) for x in row.values() if isinstance(x, str)):
+                        continue
+                    kept.append({kk: ("" if _is_placeholder(vv) else vv) for kk, vv in row.items()})
+                report_data[k] = kept
+            elif isinstance(v[0], str):
+                report_data[k] = [x for x in v if not _is_placeholder(x)]
+
+
 def _render_and_save(template, report_data, today):
-    """渲染模板并写入 files/<today>/美股收盘日报_<today>.html。"""
-    generated_at = datetime.datetime.now(_REPORT_TZ).strftime(_GENERATED_AT_FORMAT)
+    """渲染模板并写入 files/<today>/ + index/<today>/，再刷新归档索引与 sitemap。"""
+    now = datetime.datetime.now(_REPORT_TZ)
+    generated_at = now.strftime(_GENERATED_AT_FORMAT)
+
+    # 报告覆盖的是「美国哪个交易日的收盘」：北京时间早上 8 点生成 = 前一个美东交易日
+    us_eastern = datetime.timezone(datetime.timedelta(hours=-5))   # EST；夏令时差 1 小时不影响交易日判定
+    sess = _session_date(now, us_eastern)
+
+    ranking = (report_data.get("data") or {}).get("indices") or {}
+    sp = ranking.get("S&P 500") or {}
+    sp_txt = f"标普500 {sp.get('change_pct', 0):+.2f}%" if sp.get("change_pct") is not None else ""
+    report_data["session_date"] = sess
+    report_data["canonical"] = f"{_SITE_URL}/{today}/"
+    report_data["meta_description"] = (
+        f"美股 {sess} 交易日收盘日报：{sp_txt}，"
+        f"含大盘表现、板块与主题强弱、技术面、重点个股异动、明日交易计划与风险提示。"
+        f"数据来自 Yahoo Finance 盘后快照。")
+
     html_content = template.render(generated_at=generated_at, **report_data)
 
     output_dir = _REPORT_OUTPUT_DIR / today
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"美股收盘日报_{today}.html"
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(html_content)
-
+    output_file.write_text(html_content, encoding="utf-8")
     print(f"✅ 美股日报HTML报告已生成：{output_file}")
+
+    # 归档副本 + 首页
+    ( _SITE_DIR / today).mkdir(parents=True, exist_ok=True)
+    (_SITE_DIR / today / "index.html").write_text(html_content, encoding="utf-8")
+    (_SITE_DIR / "index.html").write_text(html_content, encoding="utf-8")
+    dates = _write_site_meta(_SITE_DIR, _SITE_URL, _SITE_NAME)
+    print(f"✅ 首页与归档已更新（归档 {len(dates)} 期，含 robots/sitemap/404）")
+    return sess
 
 
 # 报告数据结构种子。这里**不放任何编造数值**：所有字段都由真实采集数据推导
@@ -899,6 +952,9 @@ def generate_report(args=None):
 
     # 16. 覆盖 LLM 生成的 15 条结论（若存在 llm_data/market_llm_<date>.json）
     _apply_llm_conclusions(report_data, today, data)
+
+    # 渲染前最后一道：把仍带「暂无 / 未接入」的字段与行整条清掉
+    _sanitize_placeholders(report_data)
 
     # 渲染并保存报告
     _render_and_save(template, report_data, today)

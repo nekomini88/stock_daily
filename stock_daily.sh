@@ -9,7 +9,7 @@
 
 set -uo pipefail
 
-cd /root/stock_daily
+cd "$(dirname "$(readlink -f "$0")")"
 
 today=$(date +%Y-%m-%d)
 mkdir -p files/${today}
@@ -34,10 +34,14 @@ fi
 
 echo "✅ 报告生成成功: $HTML_FILE"
 
-# 同步到部署目录 /index/index.html
+# 同步到部署目录（首页 + 归档副本，归档索引与 sitemap 由生成器写）
 mkdir -p index
 cp -f "$HTML_FILE" "index/index.html"
 echo "✅ 已同步到 index/index.html"
+
+# 发布到线上（绿云 /data/sites/stock）
+echo "🚀 发布到线上..."
+python3 deploy_site.py || echo "⚠️ 发布失败，日报已生成但未上线，稍后手动跑 deploy_site.py"
 
 # 3. 生成 TXT 分段文件并发送到 Telegram 频道
 echo "=== 发送到 Telegram ==="

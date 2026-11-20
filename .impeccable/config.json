@@ -1,0 +1,12 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "coverage/**",
+      "dist/**",
+      "node_modules/**",
+      ".git/**"
+    ],
+    "ignoreValues": []
+  }
+}
