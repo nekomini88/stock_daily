@@ -467,20 +467,31 @@ def _apply_real_flows(report_data, data):
     ranked, top, bottom = _group_side(data.get("sectors_performance"), "name")
     if not ranked:
         return
-    report_data["money_flow_in"] = "、".join(top) or "暂无"
+    # "主要流入"只能列真上涨的板块：涨幅榜前三常含负值（如 1 涨 10 跌的日子），
+    # 把 -0.12%、-0.62% 写进"主要流入"就是自相矛盾（2026-11-21 实际发出去过）。
+    any_up = any(_num(i.get("change_pct")) and i["change_pct"] > 0 for i in ranked)
+    if any_up:
+        rising = [i for i in ranked if i["change_pct"] > 0]
+        rising.sort(key=lambda i: -i["change_pct"])
+        report_data["money_flow_in"] = "、".join(
+            f"{i.get('name')}({i['change_pct']:+.2f}%)" for i in rising[:3]
+        )
+    else:
+        report_data["money_flow_in"] = "、".join(top)
     report_data["money_flow_out"] = "、".join(bottom) or "无板块下跌（全部收涨）"
     # 全市场收跌时不存在"资金流入"：标签改为抗跌口径，避免把"跌得少"写成"流入"
-    any_up = any(_num(i.get("change_pct")) and i["change_pct"] > 0 for i in ranked)
     report_data["money_flow_in_label"] = "主要流入" if any_up else "相对抗跌（跌幅最小，非资金净流入）"
     up = sum(1 for s in ranked if s["change_pct"] > 0)
-    down = len(ranked) - up
+    flat = sum(1 for s in ranked if s["change_pct"] == 0)
+    down = len(ranked) - up - flat
     state = _breadth_label(up, len(ranked))[0].split("（")[0]
     # 保留原有措辞（"普跌调整/普涨行情/分化震荡"），只统一阈值口径
     state = {"普跌": "普跌调整", "普涨": "普涨行情", "分化": "分化震荡",
              "接近普涨": "接近普涨"}.get(state, state)
     sp500 = _sp500_change(data)
     detail = f"，标普500 当日 {sp500:+.2f}%" if sp500 is not None else ""
-    report_data["market_state"] = f"{state}：{len(ranked)} 大板块 {up} 涨 {down} 跌{detail}"
+    flat_txt = f" {flat} 平" if flat else ""
+    report_data["market_state"] = f"{state}：{len(ranked)} 大板块 {up} 涨 {down} 跌{flat_txt}{detail}"
 
 
 def _apply_real_macro_observations(report_data, data):

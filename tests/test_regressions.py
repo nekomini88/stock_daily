@@ -195,6 +195,28 @@ class TestClaimSanitizer:
         assert "信息技术(+0.20%)" not in rd["money_flow_out"]
         assert rd["money_flow_out"] == "无板块下跌（全部收涨）"
 
+    def test_money_flow_in_only_lists_gainers(self):
+        # 1 涨 10 跌的日子：涨幅榜前三含负值，不能当"流入"发出去
+        rd = {}
+        gsd._apply_real_flows(rd, {"sectors_performance": [
+            {"name": "必需消费", "change_pct": 0.67},
+            {"name": "医疗保健", "change_pct": -0.12},
+            {"name": "能源", "change_pct": -0.62},
+            {"name": "信息技术", "change_pct": -7.27},
+        ], "indices": {"S&P 500": {"change_pct": -3.70}}})
+        assert rd["money_flow_in"] == "必需消费(+0.67%)", rd["money_flow_in"]
+        assert rd["money_flow_in_label"] == "主要流入"
+        assert "1 涨 3 跌" in rd["market_state"]
+
+    def test_flat_sectors_not_counted_as_decliners(self):
+        rd = {}
+        gsd._apply_real_flows(rd, {"sectors_performance": [
+            {"name": "A", "change_pct": 1.0},
+            {"name": "B", "change_pct": 0.0},
+            {"name": "C", "change_pct": -1.0},
+        ]})
+        assert "1 涨 1 跌 1 平" in rd["market_state"], rd["market_state"]
+
     # ── 点位关口断言必须有真实价格支撑（2026-10-23 实测漏报）──────
     DATA_LEVELS = {
         "indices": {
@@ -359,11 +381,14 @@ class TestNoFabricatedData:
         assert rows == []
 
     def test_no_source_sections_marked(self):
-        gsd._apply_no_source_placeholders(self.rd)
-        assert self.rd["fed_rate_cut_probability"] == gsd._NO_SOURCE
-        assert self.rd["recent_earnings"][0]["company"] == gsd._NO_SOURCE
-        assert self.rd["upcoming_earnings"][0]["date"] == gsd._NO_SOURCE
-        assert self.rd["institutional_views"][0]["institution"] == gsd._NO_SOURCE
+        # 口径变更：Fed 降息预期 / 财报日历 / 机构观点三个无数据源板块已从模板删除，
+        # 不再往 report_data 里塞「暂无」占位（旧断言检查已删除的行为）。
+        rd = {"fed_rate_cut_probability": None}
+        gsd._apply_no_source_placeholders(rd)
+        assert rd == {"fed_rate_cut_probability": None}
+        tpl = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "templates", "report.html.j2"), encoding="utf-8").read()
+        assert "fed_rate_cut_probability" not in tpl
 
     def test_llm_missing_placeholders_cover_llm_fields(self):
         gsd._apply_llm_only_placeholders(self.rd)
